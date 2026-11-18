@@ -60,6 +60,41 @@ ViewResult render(RenderWorker& w, bool grid) {
     require(r.error.empty(), "render failed: " + r.error);
     return r;
 }
+void check_limits(RenderWorker& worker) {
+    for (const char* model : {"PINHOLE","ORTHOGRAPHIC"})
+        for (const char* primitive : {"3dgs","mip","3dgut"}) for (bool grid : {false,true}) {
+            auto q = request(grid);
+            q.model = model; q.primitive = primitive;
+            ViewResult mono;
+            require(worker.wait_result(worker.submit(q),mono,120) && mono.error.empty(),"mono control failed");
+            for (auto limits : {std::optional<spirula::stereo::DepthLimits>{},
+                                std::optional<spirula::stereo::DepthLimits>{{0,0}}}) {
+                ViewResult pair;
+                require(worker.wait_result(worker.submit_stereo(q,2.5,limits),pair,120) && pair.error.empty(),
+                        "flat pair failed");
+                require(pair.views == 2 && pair.pair_state != spirula::stereo::CameraPair::State::Ready,
+                        "flat pair has no explanation");
+                const size_t row = (size_t)q.W*3;
+                for (int y = 0; y < q.H; ++y) for (int eye = 0; eye < 2; ++eye)
+                    require(std::equal(mono.rgb8.begin()+y*row,mono.rgb8.begin()+(y+1)*row,
+                                       pair.rgb8.begin()+(2*y+eye)*row),"flat eye differs from 2D pixels");
+            }
+            for (spirula::stereo::DepthLimits limits : {spirula::stereo::DepthLimits{10,4},{24,9.5}}) {
+                ViewResult pair;
+                require(worker.wait_result(worker.submit_stereo(q,2.5,limits),pair,120) && pair.error.empty(),
+                        "compositor-limited pair failed");
+                require(pair.views == 2 && pair.pair_state == spirula::stereo::CameraPair::State::Ready,
+                        "finite scene did not produce a camera pair");
+                const size_t row = (size_t)q.W*3;
+                bool different = false;
+                for (int y = 0; y < q.H; ++y)
+                    different |= !std::equal(pair.rgb8.begin()+2*y*row,pair.rgb8.begin()+(2*y+1)*row,
+                                             pair.rgb8.begin()+(2*y+1)*row);
+                require(different,"a finite scene was flattened");
+            }
+        }
+}
+
 void check_pair(RenderWorker& worker, std::mutex& mutex, std::atomic<int>& step) {
     ViewRequest left = request(false), right = left;
     right.c2w[3] += 0.08f;
@@ -159,6 +194,8 @@ int main() {
                     "the device pick differs from the host pick");
         check_pair(device_w, mu, step);
         check_pair(host_w, mu, step);
+        check_limits(device_w);
+        check_limits(host_w);
         device_w.stop();
         host_w.stop();
         engine_reset();
