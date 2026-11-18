@@ -279,8 +279,9 @@ struct RenderWorker::Impl {
         const auto projection=engine_viewer_projection();
         const auto depths=study::axial_depths(projection.rows,view,scale);
         const auto contributions=study::raster(projection.rows,depths,q.W,q.H,[](size_t,size_t,float) {});
-        const double low=study::quantile(depths,contributions.weight,.01);
-        const double high=study::quantile(depths,contributions.weight,.99);
+        const auto pixels=study::pixel_depths(contributions);
+        const double low=study::quantile(pixels,contributions.opacity,.01);
+        const double high=study::quantile(pixels,contributions.opacity,.99);
         const ParallaxRange visible{std::max(0.,1/request.convergence-1/high),
                                     std::max(0.,1/low-1/request.convergence),true};
         const double original=pair.right.offset;

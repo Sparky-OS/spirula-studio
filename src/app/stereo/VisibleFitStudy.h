@@ -15,6 +15,7 @@ struct Contributions {
     std::vector<int> peak_pixel;
     std::vector<float> peak_weight;
     std::vector<float> transmission;
+    std::vector<double> opacity, inverse_depth;
 };
 
 template<class Visitor>
@@ -28,6 +29,8 @@ Contributions raster(const std::vector<float>& rows, const std::vector<double>& 
     result.peak_pixel.assign(count,-1);
     result.peak_weight.assign(count,0);
     result.transmission.assign((size_t)width*height,1);
+    result.opacity.assign(result.transmission.size(),0);
+    result.inverse_depth.assign(result.transmission.size(),0);
     std::vector<uint8_t> done(result.transmission.size(),0);
     std::vector<size_t> order(count);
     std::iota(order.begin(),order.end(),0);
@@ -59,6 +62,8 @@ Contributions raster(const std::vector<float>& rows, const std::vector<double>& 
             if (after<=1e-4f) { done[pixel]=1; continue; }
             const float weight=before*alpha;
             result.weight[i]+=weight;
+            result.opacity[pixel]+=weight;
+            result.inverse_depth[pixel]+=weight/z[i];
             if (weight>peak) { peak=weight;result.peak_pixel[i]=(int)pixel;result.peak_weight[i]=weight; }
             result.transmission[pixel]=after;
             visit(i,pixel,weight);
@@ -76,6 +81,14 @@ inline double quantile(const std::vector<double>& depths,const std::vector<doubl
     double sum=0;
     for (size_t i:order) { sum+=weights[i];if (sum>=p*total) return depths[i]; }
     return depths[order.back()];
+}
+
+inline std::vector<double> pixel_depths(const Contributions& contributions) {
+    std::vector<double> depths(contributions.opacity.size(),INFINITY);
+    for (size_t i=0;i<depths.size();++i)
+        if (contributions.inverse_depth[i]>0)
+            depths[i]=contributions.opacity[i]/contributions.inverse_depth[i];
+    return depths;
 }
 
 inline std::vector<double> axial_depths(const std::vector<float>& rows,const float* view,double scale) {
