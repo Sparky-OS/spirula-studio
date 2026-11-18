@@ -85,6 +85,12 @@ void check_limits(RenderWorker& worker) {
                         "compositor-limited pair failed");
                 require(pair.views == 2 && pair.pair_state == spirula::stereo::CameraPair::State::Ready,
                         "finite scene did not produce a camera pair");
+                require(pair.W == q.W && pair.H == q.H &&
+                        pair.rgb8.size() == (size_t)q.W*q.H*6,
+                        "fitted pair lost its dimensions or storage");
+                require(pair.pick_hit == mono.pick_hit &&
+                        std::equal(pair.pick_point,pair.pick_point+3,mono.pick_point),
+                        "fitted pair lost the centre-camera pick");
                 const size_t row = (size_t)q.W*3;
                 bool different = false;
                 for (int y = 0; y < q.H; ++y)
@@ -96,7 +102,11 @@ void check_limits(RenderWorker& worker) {
                 ViewResult capped;
                 require(worker.wait_result(worker.submit_stereo(q,2.5,limits,envelope),capped,120) &&
                         capped.error.empty(),"comparison envelope failed");
-                require(std::abs(capped.cameras.right.offset-pair.cameras.right.offset/2) < 1e-7,
+                const double coefficient = q.model == "ORTHOGRAPHIC"
+                    ? 2*q.fx/2.5 : 2*q.fx;
+                require(capped.cameras.right.offset < pair.cameras.right.offset &&
+                        coefficient*capped.cameras.right.offset*envelope.sunk <= limits.sunk*q.W/1920.+1e-6 &&
+                        coefficient*capped.cameras.right.offset*envelope.popped <= limits.popped*q.W/1920.+1e-6,
                         "comparison envelope did not cap the cameras");
                 require(capped.cameras.support.sunk == pair.cameras.support.sunk &&
                         capped.cameras.support.popped == pair.cameras.support.popped,

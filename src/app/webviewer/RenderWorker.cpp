@@ -409,7 +409,6 @@ struct RenderWorker::Impl {
                     }
                     const bool cached = !(trace && *trace) && !flat && fitted.offset == cameras.right.offset;
                     auto left_pixels = cached ? std::move(fitted.left) : render_once(p.q,res);
-                    if (cached) { const auto id=res.id; const auto step=res.step; res=fitted.left_result; res.id=id; res.step=step; res.cameras=cameras; res.pair_state=cameras.state; }
                     const auto left_projection = trace && *trace ? engine_viewer_projection() : EngineViewerProjection{};
                     ViewResult right_result;
                     auto right_pixels = flat ? left_pixels : cached ? std::move(fitted.right) : render_once(right,right_result);
