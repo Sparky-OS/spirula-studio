@@ -4,12 +4,16 @@
 #include "engine/Engine.h"
 #include "app/webviewer/RenderWorker.h"
 
+#include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <mutex>
 #include <random>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -24,7 +28,7 @@ TorchTensorView tvi(std::vector<int32_t>& v, std::vector<int64_t> s) {
     return {(uint64_t)(uintptr_t)v.data(), 4, std::move(s)};
 }
 
-ViewResult render(RenderWorker& w, bool grid) {
+ViewRequest request(bool grid) {
     ViewRequest q;
     const float eye[3] = {0.0f, -2.2f, 1.2f};
     // Looking at the origin, z up (OpenGL camera axes in the columns).
@@ -47,10 +51,51 @@ ViewResult render(RenderWorker& w, bool grid) {
     q.grid_dist = 2.5f;
     q.pick_px = 160;
     q.pick_py = 120;
+    return q;
+}
+
+ViewResult render(RenderWorker& w, bool grid) {
     ViewResult r;
-    require(w.wait_result(w.submit(q), r, 120.0), "render timed out");
+    require(w.wait_result(w.submit(request(grid)), r, 120.0), "render timed out");
     require(r.error.empty(), "render failed: " + r.error);
     return r;
+}
+void check_pair(RenderWorker& worker, std::mutex& mutex, std::atomic<int>& step) {
+    ViewRequest left = request(false), right = left;
+    right.c2w[3] += 0.08f;
+    ViewResult reference[2], pair;
+    require(worker.wait_result(worker.submit(left), reference[0], 120), "left timed out");
+    require(worker.wait_result(worker.submit(right), reference[1], 120), "right timed out");
+    std::atomic<bool> first_done{false}, attempting{false};
+    const int initial_step = step.load();
+    left.after_render = [&] {
+        first_done = true;
+        while (!attempting.load()) std::this_thread::yield();
+    };
+    right.before_render = [&] {
+        require(step.load() == initial_step, "training advanced between eyes");
+    };
+    std::thread trainer([&] {
+        while (!first_done.load()) std::this_thread::yield();
+        attempting = true;
+        std::lock_guard<std::mutex> lock(mutex);
+        ++step;
+    });
+    const bool ready = worker.wait_result(worker.submit_pair(left, right), pair, 120);
+    trainer.join();
+    require(ready && pair.error.empty(), "pair failed: " + pair.error);
+    require(pair.views == 2 && pair.W == left.W && pair.H == left.H &&
+            pair.step == initial_step, "pair dimensions or revision changed");
+    require(pair.rgb8.size() == 2 * reference[0].rgb8.size(), "pair storage has wrong size");
+    const size_t row = (size_t)pair.W * 3;
+    for (int y = 0; y < pair.H; ++y)
+        for (int eye = 0; eye < 2; ++eye)
+            require(std::equal(reference[eye].rgb8.begin() + y * row,
+                               reference[eye].rgb8.begin() + (y + 1) * row,
+                               pair.rgb8.begin() + (2 * y + eye) * row),
+                    "pair is not the two independently rendered cameras");
+    require(reference[0].rgb8 != reference[1].rgb8, "fixture has no camera disparity");
+    require(step == initial_step + 1, "trainer did not resume after the pair");
 }
 }  // namespace
 
@@ -84,7 +129,8 @@ int main() {
         std::mutex mu;
         ViewerHooks hooks;
         hooks.engine_mutex = &mu;
-        hooks.current_step = [] { return 1 << 20; };
+        std::atomic<int> step{1 << 20};
+        hooks.current_step = [&] { return step.load(); };
         hooks.set_render_pending = [](bool) {};
         ViewerRenderConfig cfg;
         cfg.primitive = "3dgs";
@@ -108,6 +154,8 @@ int main() {
         for (int k = 0; k < 3; k++)
             require(std::fabs(d.pick_point[k] - h.pick_point[k]) <= 1e-6f,
                     "the device pick differs from the host pick");
+        check_pair(device_w, mu, step);
+        check_pair(host_w, mu, step);
         device_w.stop();
         host_w.stop();
         engine_reset();

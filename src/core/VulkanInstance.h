@@ -30,7 +30,7 @@ inline void destroy_vulkan_instance(VkInstance instance, const VkAllocationCallb
 #endif
     vkDestroyInstance(instance, alloc);
 #ifdef __linux__
-    // NVIDIA's final Vulkan-instance teardown also releases this thread's EGL context.
+    // NVIDIA's Vulkan-instance teardown also releases this thread's EGL context.
     bool restored = true;
     if (context && get_context() != context) {
         restored = bind_api && make_current && bind_api(api) &&

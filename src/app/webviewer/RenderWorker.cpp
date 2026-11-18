@@ -62,6 +62,7 @@ struct DevBuf {
 struct PendingReq {
     uint64_t id = 0;
     ViewRequest q;
+    std::optional<ViewRequest> right;
 };
 
 }  // namespace
@@ -92,9 +93,10 @@ struct RenderWorker::Impl {
 
     // ---- render worker -----------------------------------------------------
 
-    uint64_t submit(const ViewRequest& q) {
+    uint64_t submit(const ViewRequest& q, std::optional<ViewRequest> right = {}) {
         std::unique_lock<std::mutex> lk(mu);
         pending.q = q;
+        pending.right = std::move(right);
         pending.id = next_id++;
         has_pending = true;
         uint64_t id = pending.id;
@@ -154,7 +156,22 @@ struct RenderWorker::Impl {
                     throw std::runtime_error(
                         "viewer: the selected GPU is not usable on this thread");
 #endif
-                if (p.q.raw) res.rgba8 = render_raw(p.q);
+                std::lock_guard<std::mutex> engine_lock(*hooks.engine_mutex);
+                res.step = hooks.current_step ? hooks.current_step() : -1;
+                if (p.right) {
+                    if (p.q.raw || p.right->raw || p.q.W != p.right->W || p.q.H != p.right->H)
+                        throw std::runtime_error("viewer: incompatible pair requests");
+                    auto left = render_once(p.q, res);
+                    ViewResult right_result;
+                    auto right = render_once(*p.right, right_result);
+                    const size_t row = (size_t)res.W * 3;
+                    res.rgb8.resize(2 * left.size());
+                    for (int y = 0; y < res.H; ++y) {
+                        std::memcpy(res.rgb8.data() + y * row * 2, left.data() + y * row, row);
+                        std::memcpy(res.rgb8.data() + y * row * 2 + row, right.data() + y * row, row);
+                    }
+                    res.views = 2;
+                } else if (p.q.raw) res.rgba8 = render_raw(p.q);
                 else res.rgb8 = render_once(p.q, res);
             } catch (const std::exception& e) {
                 std::fprintf(stderr, "[viewer] render error: %s\n", e.what());
@@ -232,7 +249,6 @@ struct RenderWorker::Impl {
         rgb.resize((size_t)npx * 3);
         Ts.resize((size_t)npx);
         {
-            std::lock_guard<std::mutex> lk(*hooks.engine_mutex);
             if (cfg.scene_slot >= 0) engine_scene_activate(cfg.scene_slot);
             // The restore has to run whatever the render does.
             struct After {
@@ -588,10 +604,6 @@ struct RenderWorker::Impl {
             }
         };
         {
-            // Engine access: exclusive with the training step. Everything up
-            // to the annotated-u8 download stays under the lock, mirroring
-            // Trainer.render's "post-processor + D->H inside the lock".
-            std::lock_guard<std::mutex> lk(*hooks.engine_mutex);
 
             // Several models can be resident at once (a comparison viewer);
             // binding one is a pointer swap, so it is done per render rather
@@ -660,6 +672,9 @@ void RenderWorker::stop() {
 }
 
 uint64_t RenderWorker::submit(const ViewRequest& q) { return _impl->submit(q); }
+uint64_t RenderWorker::submit_pair(const ViewRequest& left, const ViewRequest& right) {
+    return _impl->submit(left, right);
+}
 
 bool RenderWorker::wait_result(uint64_t id, ViewResult& out, double timeout_s) {
     return _impl->wait_result(id, out, timeout_s);
