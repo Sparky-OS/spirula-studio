@@ -284,6 +284,12 @@ struct RenderWorker::Impl {
     // ---- the actual render (trainer._render + get_outputs viewer subset) ---
 
     std::vector<uint8_t> render_once(const ViewRequest& q, ViewResult& res) {
+        if (cfg.scene_slot >= 0) engine_scene_activate(cfg.scene_slot);
+        struct After {
+            const std::function<void()>& callback;
+            ~After() { if (callback) callback(); }
+        } after{q.after_render};
+        if (q.before_render) q.before_render();
         const int W = q.W, H = q.H;
         const int64_t npx = (int64_t)W * H;
         static const float D[3] = {1.f, -1.f, -1.f};
@@ -608,7 +614,7 @@ struct RenderWorker::Impl {
             // Several models can be resident at once (a comparison viewer);
             // binding one is a pointer swap, so it is done per render rather
             // than by whoever last touched the engine.
-            if (cfg.scene_slot >= 0) engine_scene_activate(cfg.scene_slot);
+
 
             set_camera_params(W, H, q.model, "NONE",
                               tvp(vm, 4, {1, 4, 4}),

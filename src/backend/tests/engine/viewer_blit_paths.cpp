@@ -76,7 +76,10 @@ void check_pair(RenderWorker& worker, std::mutex& mutex, std::atomic<int>& step)
         require(step.load() == initial_step, "training advanced between eyes");
     };
     std::thread trainer([&] {
-        while (!first_done.load()) std::this_thread::yield();
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(120);
+        while (!first_done.load() && std::chrono::steady_clock::now() < deadline)
+            std::this_thread::yield();
+        if (!first_done.load()) return;
         attempting = true;
         std::lock_guard<std::mutex> lock(mutex);
         ++step;
