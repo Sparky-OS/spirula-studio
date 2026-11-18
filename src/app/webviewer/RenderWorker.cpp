@@ -1,6 +1,7 @@
 // RenderWorker.cpp -- see RenderWorker.h.
 
 #include "app/webviewer/RenderWorker.h"
+#include "app/webviewer/PairTrace.h"
 
 #include "backend/api/BackendRuntime.h"
 #include "engine/Engine.h"    // engine render + viewer entry points
@@ -317,10 +318,29 @@ struct RenderWorker::Impl {
                         request.view_shear = camera.shear;
                     };
                     apply(p.q,cameras.left); apply(right,cameras.right);
+                    const char* trace = spirula::stereo::pair_trace_directory();
+                    std::vector<float> trace_depth, trace_transmittance;
+                    std::vector<uint8_t> trace_centre;
+                    if (trace && *trace) {
+                        ViewResult centre_result;
+                        trace_centre = render_once(centre,centre_result);
+                        trace_depth.resize((size_t)res.W*res.H);
+                        trace_transmittance.resize(trace_depth.size());
+                        engine_copy_render_to_host(tv_null(),
+                            tvp(trace_depth.data(),4,{1,res.H,res.W,1}),
+                            tvp(trace_transmittance.data(),4,{1,res.H,res.W,1}),tv_null(),tv_null());
+                    }
                     auto left_pixels = render_once(p.q,res);
                     ViewResult right_result;
                     auto right_pixels = flat ? left_pixels : render_once(right,right_result);
                     pack_pair(left_pixels,right_pixels,res);
+                    if (trace && *trace) {
+                        float view[16]; engine_viewmat(centre.c2w,view);
+                        spirula::stereo::write_pair_trace(trace,res.id,res.step,res.W,res.H,
+                            p.stereo->convergence,cfg.train_frame_scale*cfg.relative_scale.value_or(1.f),
+                            centre.fx,centre.cx,centre.cy,cameras.right.offset,view,trace_depth,
+                            trace_transmittance,trace_centre,res.rgb8);
+                    }
                 } else if (p.right) {
                     if (p.q.raw || p.right->raw || p.q.W != p.right->W || p.q.H != p.right->H)
                         throw std::runtime_error("viewer: incompatible pair requests");
