@@ -7,7 +7,7 @@
 namespace spirula::stereo {
 
 struct DepthLimits { double sunk, popped; };
-struct DepthRange { double near, far; };
+struct DepthRange { double z_min, z_max; };
 struct EyeCamera { double offset = 0, principal = 0, shear = 0; };
 struct CameraPair {
     EyeCamera left, right;
@@ -25,16 +25,17 @@ inline CameraPair camera_pair(std::optional<DepthLimits> limits, DepthRange supp
     if (limits->sunk == 0 && limits->popped == 0) {
         pair.state = CameraPair::State::ZeroLimits; return pair;
     }
-    if (!(convergence > 0 && focal > 0 && width > 0 && support.near > 0 &&
-          support.far >= support.near && std::isfinite(support.far))) {
+    if (!(convergence > 0 && focal > 0 && std::isfinite(convergence) && std::isfinite(focal) &&
+          width > 0 && (orthographic || support.z_min > 0) && std::isfinite(support.z_min) &&
+          support.z_max >= support.z_min && std::isfinite(support.z_max))) {
         pair.state = CameraPair::State::NoSupport; return pair;
     }
     const double sunk = limits->sunk * width / 1920.0;
     const double popped = limits->popped * width / 1920.0;
     if (orthographic) {
         double slope = INFINITY;
-        if (support.near < convergence) slope = popped / (convergence - support.near);
-        if (support.far > convergence) slope = std::min(slope, sunk / (support.far - convergence));
+        if (support.z_min < convergence) slope = popped / (convergence - support.z_min);
+        if (support.z_max > convergence) slope = std::min(slope, sunk / (support.z_max - convergence));
         if (!std::isfinite(slope)) slope = 0;
         pair.left.shear = -slope / (2 * focal);
         pair.right.shear = -pair.left.shear;
@@ -43,8 +44,8 @@ inline CameraPair camera_pair(std::optional<DepthLimits> limits, DepthRange supp
     } else {
         // Infinity remains bounded too, including a view-dependent environment.
         double baseline = sunk * convergence / focal;
-        if (support.near < convergence)
-            baseline = std::min(baseline, popped / (focal * (1 / support.near - 1 / convergence)));
+        if (support.z_min < convergence)
+            baseline = std::min(baseline, popped / (focal * (1 / support.z_min - 1 / convergence)));
         pair.left.offset = -baseline / 2;
         pair.right.offset = baseline / 2;
         pair.left.principal = -focal * baseline / (2 * convergence);
