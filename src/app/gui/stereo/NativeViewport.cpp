@@ -1,4 +1,6 @@
 #include "app/gui/stereo/NativeViewport.h"
+#include "core/Env.h"
+#include <cstdio>
 
 #ifdef __linux__
 #define GLFW_EXPOSE_NATIVE_X11
@@ -229,6 +231,10 @@ bool NativeViewport::present(const uint8_t* rgb, int eye_width, int height, uint
     try {
 #ifdef __linux__
         if (!_impl->ensure() || !rgb || eye_width <= 0 || height <= 0 || width <= 0 || logical_height <= 0) return false;
+        if (spirula::env_on("GUI_AUTOMATION") && spirula::env("GUI_PAIR_CAPTURE") &&
+            (!_impl->shown || _impl->revision != revision))
+            std::fprintf(stderr,"[stereo-place] x=%d y=%d width=%d height=%d raster_width=%d raster_height=%d\n",
+                         x,y,width,logical_height,eye_width,height);
         if (host.display) {
             wl_subsurface_set_position(_impl->subsurface,x,y);
             wp_viewport_set_destination(_impl->viewport,width,logical_height);

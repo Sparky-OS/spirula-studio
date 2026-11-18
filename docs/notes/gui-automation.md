@@ -180,3 +180,13 @@ asserts "this drag selected 412 splats" wants the op-script path in
 [gui-editing-plan.md](gui-editing-plan.md) instead, which needs no window at
 all. Use this for the part that genuinely needs a window: that the gesture
 reaches the tool, that the panel is laid out, that the picture is right.
+
+## Atomic stereo trace
+
+With GUI automation armed, `SS_GUI_PAIR_CAPTURE` can name an existing writable directory for a bounded four-slot trace.
+Each engine pair writes centre RGB8, float32 ray depth and transmittance, and left-first RGB8 eyes under the same engine lock.
+The JSON records request, training step, raster dimensions, centre camera and the applied compositor-derived camera offset.
+The native viewport logs its placement so a compositor capture can be measured at the actual displayed size.
+The trace adds a centre render and host readback, so its timings are not performance measurements.
+Without both automation and the trace directory this path does no work.
+Use the completed native presentation's request id to select a trace; a completed worker result alone may still be waiting for presentation.
