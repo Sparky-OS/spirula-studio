@@ -5956,6 +5956,17 @@ void GuiApp::load_native_devices() {
 void GuiApp::draw_device_picker(bool as_menu) {
 #ifdef SS_EDITION_PACKAGE
     (void)as_menu;
+    load_native_devices();
+    const auto chosen = std::find_if(_native_devices.begin(),_native_devices.end(),
+        [](const NativeDeviceRow& device) { return device.usable; });
+#ifdef SS_BACKEND_VULKAN
+    const char* backend_name = "Vulkan";
+#else
+    const char* backend_name = "CUDA";
+#endif
+    const std::string label = std::string(backend_name)+" | "+
+        (chosen != _native_devices.end() ? chosen->name : msg::no_device_found.get());
+    ImGui::TextUnformatted(label.c_str());
     return;
 #endif
     load_native_devices();
