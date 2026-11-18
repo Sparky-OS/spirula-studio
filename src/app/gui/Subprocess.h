@@ -119,5 +119,6 @@ std::vector<std::string> command_argv(const std::string& command,
 // the caller's cue to fall back to showing the address. Never blocks and never
 // waits for the browser to exit.
 bool open_url(const std::string& url);
+bool launch_detached(const std::vector<std::string>& argv);
 
 }  // namespace gui

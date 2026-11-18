@@ -637,6 +637,8 @@ bool command_exists(const std::string& exe) {
     return SearchPathA(nullptr, exe.c_str(), ".exe", MAX_PATH, found, nullptr) > 0;
 }
 
+bool launch_detached(const std::vector<std::string>&) { return false; }
+
 bool open_url(const std::string& url) {
     // Not ShellExecute: it lives in shell32, and this is the only call in the
     // program that would need it. `cmd /c start` reaches the same handler.
@@ -1363,48 +1365,50 @@ bool command_exists(const std::string& exe) {
     return false;
 }
 
+bool launch_detached(const std::vector<std::string>& argv) {
+    if (argv.empty() || !command_exists(argv[0])) return false;
+    std::vector<char*> args;
+    for (const auto& arg : argv) args.push_back(const_cast<char*>(arg.c_str()));
+    args.push_back(nullptr);
+    std::unique_lock<std::mutex> lock(spawn_mutex);
+    const auto completion_fds = inherited_completions();
+    const pid_t pid = fork();
+    if (pid < 0) return false;
+    if (pid == 0) {
+        lock.release();
+        for (int fd : completion_fds) close(fd);
+        for (int fd : ownership_writers) close(fd);
+        const pid_t detached = fork();
+        if (detached < 0) _exit(1);
+        if (detached == 0) {
+            setsid();
+            int devnull = open("/dev/null", O_RDWR);
+            if (devnull >= 0) {
+                dup2(devnull, STDIN_FILENO);
+                dup2(devnull, STDOUT_FILENO);
+                dup2(devnull, STDERR_FILENO);
+                if (devnull > STDERR_FILENO) close(devnull);
+            }
+            execvp(args[0],args.data());
+            _exit(127);
+        }
+        _exit(0);
+    }
+    lock.unlock();
+    int status = 0;
+    return waitpid(pid,&status,0) == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0;
+}
+
 bool open_url(const std::string& url) {
 #ifdef __APPLE__
     const char* openers[] = {"open"};
 #else
-    // xdg-open covers every desktop that follows the freedesktop spec; the
-    // other two are for the sessions that ship one but not it.
     const char* openers[] = {"xdg-open", "gio", "x-www-browser"};
 #endif
     for (const char* opener : openers) {
         if (!command_exists(opener)) continue;
-        std::unique_lock<std::mutex> lock(spawn_mutex);
-        const auto completion_fds = inherited_completions();
-        const pid_t pid = fork();
-        if (pid < 0) return false;
-        if (pid == 0) {
-            lock.release();
-            for (int fd : completion_fds) close(fd);
-            for (int fd : ownership_writers) close(fd);
-            // Double fork so the browser is reparented to init and this
-            // process never has to reap it -- the GUI has no SIGCHLD handler
-            // and would otherwise accumulate zombies.
-            if (fork() == 0) {
-                setsid();
-                // Nothing here should write over the GUI's own stdout.
-                int devnull = open("/dev/null", O_RDWR);
-                if (devnull >= 0) {
-                    dup2(devnull, STDIN_FILENO);
-                    dup2(devnull, STDOUT_FILENO);
-                    dup2(devnull, STDERR_FILENO);
-                    if (devnull > STDERR_FILENO) close(devnull);
-                }
-                if (std::strcmp(opener, "gio") == 0)
-                    execlp(opener, opener, "open", url.c_str(), (char*)nullptr);
-                else
-                    execlp(opener, opener, url.c_str(), (char*)nullptr);
-            }
-            _exit(0);
-        }
-        lock.unlock();
-        int status = 0;
-        waitpid(pid, &status, 0);
-        return true;
+        return std::strcmp(opener,"gio") == 0 ? launch_detached({opener,"open",url}) :
+                                               launch_detached({opener,url});
     }
     return false;
 }

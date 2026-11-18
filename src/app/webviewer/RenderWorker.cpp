@@ -8,6 +8,7 @@
 #include "app/DepthColor.h"  // error_scale -- shared with the error pane
 #include "data/FrustumSize.h"
 #include "app/webviewer/RegionOverlay.h"
+#include "app/stereo/SceneSupport.h"
 
 #include <algorithm>
 #include <atomic>
@@ -59,10 +60,16 @@ struct DevBuf {
     ~DevBuf() { if (ptr) backend::device_free(ptr); }
 };
 
+struct StereoRequest {
+    double convergence;
+    std::optional<spirula::stereo::DepthLimits> limits;
+};
+
 struct PendingReq {
     uint64_t id = 0;
     ViewRequest q;
     std::optional<ViewRequest> right;
+    std::optional<StereoRequest> stereo;
 };
 
 }  // namespace
@@ -93,10 +100,12 @@ struct RenderWorker::Impl {
 
     // ---- render worker -----------------------------------------------------
 
-    uint64_t submit(const ViewRequest& q, std::optional<ViewRequest> right = {}) {
+    uint64_t submit(const ViewRequest& q, std::optional<ViewRequest> right = {},
+                    std::optional<StereoRequest> stereo = {}) {
         std::unique_lock<std::mutex> lk(mu);
         pending.q = q;
         pending.right = std::move(right);
+        pending.stereo = std::move(stereo);
         pending.id = next_id++;
         has_pending = true;
         uint64_t id = pending.id;
@@ -134,6 +143,53 @@ struct RenderWorker::Impl {
         return true;
     }
 
+    static void pack_pair(const std::vector<uint8_t>& left, const std::vector<uint8_t>& right, ViewResult& result) {
+        const size_t row = (size_t)result.W * 3;
+        result.rgb8.resize(2 * left.size());
+        for (int y = 0; y < result.H; ++y) {
+            std::memcpy(result.rgb8.data()+y*row*2,left.data()+y*row,row);
+            std::memcpy(result.rgb8.data()+y*row*2+row,right.data()+y*row,row);
+        }
+        result.views = 2;
+    }
+
+    spirula::stereo::CameraPair stereo_cameras(const ViewRequest& q, const StereoRequest& request) {
+        using namespace spirula::stereo;
+        if (!request.limits || (request.limits->sunk == 0 && request.limits->popped == 0))
+            return camera_pair(request.limits, {}, request.convergence,q.fx,q.W,false);
+        if (q.model != "PINHOLE" && q.model != "ORTHOGRAPHIC") {
+            CameraPair pair; pair.state = CameraPair::State::NoSupport; return pair;
+        }
+        if (cfg.scene_slot >= 0) engine_scene_activate(cfg.scene_slot);
+        const int64_t count = engine_get_max_num_splats();
+        std::vector<float> means(count*3), scales(count*3), opacity(count);
+        engine_copy_splats_to_host(tvp(means.data(),4,{count,3}),tv_null(),
+                                  tvp(scales.data(),4,{count,3}),tvp(opacity.data(),4,{count,1}),tv_null(),tv_null());
+        float view[16]; engine_viewmat(q.c2w,view);
+        const double scale = cfg.train_frame_scale * cfg.relative_scale.value_or(1.f);
+        const double convergence = request.convergence * scale;
+        const double sweep = request.limits->sunk * q.W / 1920. * convergence / q.fx / 2;
+        const double principal = q.fx * sweep / convergence;
+        const double left = (q.cx + principal)/q.fx, right = (q.W-q.cx+principal)/q.fx;
+        const double top = q.cy/q.fy, bottom = (q.H-q.cy)/q.fy;
+        SceneSupport support;
+        for (int64_t i = 0; i < engine_get_cur_num_splats(); ++i) {
+            const double alpha = opacity[i] >= 0 ? 1./(1.+std::exp(-opacity[i])) :
+                                std::exp(opacity[i])/(1.+std::exp(opacity[i]));
+            if (!(alpha > 1./255.)) continue;
+            double p[3];
+            for (int r = 0; r < 3; ++r)
+                p[r] = view[4*r]*means[3*i]+view[4*r+1]*means[3*i+1]+view[4*r+2]*means[3*i+2]+view[4*r+3];
+            const double radius = std::exp(std::max({scales[3*i],scales[3*i+1],scales[3*i+2]}))*std::sqrt(2*std::log(255*alpha));
+            if (q.model == "ORTHOGRAPHIC") {
+                support.z_min = std::min(support.z_min,p[2]-radius);
+                support.z_max = std::max(support.z_max,p[2]+radius);
+            } else support.sphere(p[0],p[1],p[2],radius,left,right,top,bottom,sweep);
+        }
+        auto range = support.range(); range.z_min /= scale; range.z_max /= scale;
+        return camera_pair(request.limits,range,request.convergence,q.fx,q.W,q.model=="ORTHOGRAPHIC");
+    }
+
     void worker_loop() {
         while (running) {
             PendingReq p;
@@ -158,19 +214,32 @@ struct RenderWorker::Impl {
 #endif
                 std::lock_guard<std::mutex> engine_lock(*hooks.engine_mutex);
                 res.step = hooks.current_step ? hooks.current_step() : -1;
-                if (p.right) {
+                if (p.stereo) {
+                    ViewRequest centre = p.q;
+                    const auto cameras = stereo_cameras(centre,*p.stereo);
+                    res.pair_state = cameras.state;
+                    const bool flat = cameras.left.offset == cameras.right.offset &&
+                                      cameras.left.shear == cameras.right.shear;
+                    if (centre.pick_px >= 0) render_once(centre,res);
+                    p.q.pick_px = -1;
+                    ViewRequest right = p.q;
+                    auto apply = [&](ViewRequest& request, const spirula::stereo::EyeCamera& camera) {
+                        for (int r = 0; r < 3; ++r) request.c2w[r*4+3] += request.c2w[r*4] * camera.offset;
+                        request.cx += camera.principal;
+                        request.view_shear = camera.shear;
+                    };
+                    apply(p.q,cameras.left); apply(right,cameras.right);
+                    auto left_pixels = render_once(p.q,res);
+                    ViewResult right_result;
+                    auto right_pixels = flat ? left_pixels : render_once(right,right_result);
+                    pack_pair(left_pixels,right_pixels,res);
+                } else if (p.right) {
                     if (p.q.raw || p.right->raw || p.q.W != p.right->W || p.q.H != p.right->H)
                         throw std::runtime_error("viewer: incompatible pair requests");
                     auto left = render_once(p.q, res);
                     ViewResult right_result;
                     auto right = render_once(*p.right, right_result);
-                    const size_t row = (size_t)res.W * 3;
-                    res.rgb8.resize(2 * left.size());
-                    for (int y = 0; y < res.H; ++y) {
-                        std::memcpy(res.rgb8.data() + y * row * 2, left.data() + y * row, row);
-                        std::memcpy(res.rgb8.data() + y * row * 2 + row, right.data() + y * row, row);
-                    }
-                    res.views = 2;
+                    pack_pair(left,right,res);
                 } else if (p.q.raw) res.rgba8 = render_raw(p.q);
                 else res.rgb8 = render_once(p.q, res);
             } catch (const std::exception& e) {
@@ -233,6 +302,7 @@ struct RenderWorker::Impl {
         const int64_t npx = (int64_t)W * H;
         float vm[16];
         engine_viewmat(q.c2w, vm);
+        for (int c = 0; c < 4; ++c) vm[c] += q.view_shear * vm[8+c];
         float intr[4] = {q.fx, q.fy, q.cx, q.cy};
         if (q.model == "ORTHOGRAPHIC") {
             const float scale = cfg.train_frame_scale * cfg.relative_scale.value_or(1.0f);
@@ -347,6 +417,7 @@ struct RenderWorker::Impl {
             vm[r*4 + 3] = (float)ti;
         }
         vm[15] = 1.f;
+        for (int c = 0; c < 4; ++c) vm[c] += q.view_shear * vm[8+c];
 
         float intr[4] = {q.fx, q.fy, q.cx, q.cy};
         if (q.model == "ORTHOGRAPHIC") {
@@ -611,11 +682,6 @@ struct RenderWorker::Impl {
         };
         {
 
-            // Several models can be resident at once (a comparison viewer);
-            // binding one is a pointer swap, so it is done per render rather
-            // than by whoever last touched the engine.
-
-
             set_camera_params(W, H, q.model, "NONE",
                               tvp(vm, 4, {1, 4, 4}),
                               tvp(intr, 4, {1, 4}),
@@ -681,6 +747,11 @@ uint64_t RenderWorker::submit(const ViewRequest& q) { return _impl->submit(q); }
 uint64_t RenderWorker::submit_pair(const ViewRequest& left, const ViewRequest& right) {
     return _impl->submit(left, right);
 }
+uint64_t RenderWorker::submit_stereo(const ViewRequest& centre, double convergence,
+                                    std::optional<spirula::stereo::DepthLimits> limits) {
+    return _impl->submit(centre,{},StereoRequest{convergence,limits});
+}
+
 
 bool RenderWorker::wait_result(uint64_t id, ViewResult& out, double timeout_s) {
     return _impl->wait_result(id, out, timeout_s);

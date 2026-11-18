@@ -15,6 +15,7 @@
 
 #include "data/DatasetParser.h"
 #include "data/CameraWire.h"
+#include "app/stereo/CameraPair.h"
 
 #include <array>
 #include <atomic>
@@ -84,6 +85,7 @@ struct ViewerHooks {
 struct ViewRequest {
     float c2w[12] = {1,0,0,0, 0,1,0,0, 0,0,1,0};
     float fx = 500, fy = 500, cx = 256, cy = 256;
+    float view_shear = 0;
     int W = 512, H = 512;
     std::string model = "PINHOLE";
     std::string key = "rgb";
@@ -135,6 +137,7 @@ struct ViewResult {
     int W = 0, H = 0;
     int views = 1;
     int step = -1;
+    spirula::stereo::CameraPair::State pair_state = spirula::stereo::CameraPair::State::Ready;
     std::vector<uint8_t> rgb8;   // [H, views * W, 3]
     std::vector<uint8_t> rgba8;  // [H, W, 4], ViewRequest::raw only
     std::string error;           // non-empty on failure
@@ -161,6 +164,8 @@ public:
     uint64_t submit(const ViewRequest& q);
     // One engine lock and training revision, left first in a full-width pair.
     uint64_t submit_pair(const ViewRequest& left, const ViewRequest& right);
+    uint64_t submit_stereo(const ViewRequest& centre, double convergence,
+                           std::optional<spirula::stereo::DepthLimits> limits);
     // Block up to timeout_s for the result of request `id`.
     bool wait_result(uint64_t id, ViewResult& out, double timeout_s);
     // Non-blocking: true when the result of request `id` is available.

@@ -2,6 +2,8 @@
 
 #include "app/gui/ViewportPanel.h"
 #include "app/gui/ViewBookmarks.h"
+#include "app/gui/stereo/Settings.h"
+#include "i18n/catalog/Stereo.h"
 #include "data/FrustumTemplate.h"
 
 #include "app/gui/Layout.h"
@@ -940,12 +942,61 @@ void ViewportPanel::detach() {
 }
 
 void ViewportPanel::destroy_gl() {
+    _stereo_view.hide();
+    _pair_pixels.clear();
     _preview.destroy_gl();
     if (_tex) {
         GLuint t = (GLuint)_tex;
         glDeleteTextures(1, &t);
         _tex = 0;
     }
+}
+
+void ViewportPanel::refresh_stereo() {
+    const auto& setting = stereo::settings();
+    const auto limits = setting.enabled ? _stereo_view.limits() : std::optional<stereo::Limits>{};
+    const bool changed = bool(limits) != bool(_stereo_limits) ||
+        (limits && (limits->sunk != _stereo_limits->sunk || limits->popped != _stereo_limits->popped));
+    if (changed || _stereo_settings_revision != setting.revision) {
+        _stereo_settings_revision = setting.revision;
+        _stereo_limits = limits;
+        ++_stereo_epoch;
+        _dirty = true;
+        _pair_pixels.clear();
+        using State = spirula::stereo::CameraPair::State;
+        _pair_state = !limits ? State::NoLimits :
+            limits->sunk == 0 && limits->popped == 0 ? State::ZeroLimits : State::Ready;
+        _stereo_view.hide();
+    }
+}
+
+void ViewportPanel::present_stereo() {
+    if (!stereo::settings().enabled || _pair_pixels.empty() || _stereo_image_epoch != _stereo_epoch) return;
+    const ImVec2 tl = ImGui::GetItemRectMin(), size = ImGui::GetItemRectSize();
+    if (!_stereo_view.present(_pair_pixels.data(),_tex_w,_tex_h,_pair_revision,
+                              (int)tl.x,(int)tl.y,(int)size.x,(int)size.y)) {
+        if (!_stereo_view.error().empty()) _last_error = _stereo_view.error();
+        return;
+    }
+    const ImVec2 clip0 = ImGui::GetWindowDrawList()->GetClipRectMin();
+    const ImVec2 clip1 = ImGui::GetWindowDrawList()->GetClipRectMax();
+    _stereo_hole = {std::max(tl.x,clip0.x),std::max(tl.y,clip0.y),
+                    std::min(tl.x+size.x,clip1.x),std::min(tl.y+size.y,clip1.y)};
+    ImDrawList* list = ImGui::GetWindowDrawList();
+    list->AddCallback([](const ImDrawList*, const ImDrawCmd* command) {
+        const auto& rect = *(const std::array<float,4>*)command->UserCallbackData;
+        const ImDrawData* data = ImGui::GetDrawData();
+        const ImVec2 scale = data->FramebufferScale, origin = data->DisplayPos;
+        const int x0 = (int)std::floor((rect[0]-origin.x)*scale.x);
+        const int x1 = (int)std::ceil((rect[2]-origin.x)*scale.x);
+        const int y0 = (int)std::floor((rect[1]-origin.y)*scale.y);
+        const int y1 = (int)std::ceil((rect[3]-origin.y)*scale.y);
+        glEnable(GL_SCISSOR_TEST);
+        glScissor(x0,(int)(data->DisplaySize.y*scale.y)-y1,x1-x0,y1-y0);
+        glClearColor(0,0,0,0);
+        glClear(GL_COLOR_BUFFER_BIT);
+    },&_stereo_hole);
+    list->AddCallback(ImDrawCallback_ResetRenderState,nullptr);
 }
 
 void ViewportPanel::upload(const ViewResult& res) {
@@ -961,8 +1012,16 @@ void ViewportPanel::upload(const ViewResult& res) {
     }
     glBindTexture(GL_TEXTURE_2D, (GLuint)_tex);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    if (res.views == 2) glPixelStorei(GL_UNPACK_ROW_LENGTH,2*res.W);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, res.W, res.H, 0,
                  GL_RGB, GL_UNSIGNED_BYTE, res.rgb8.data());
+    if (res.views == 2) {
+        glPixelStorei(GL_UNPACK_ROW_LENGTH,0);
+        _pair_pixels = res.rgb8;
+        ++_pair_revision;
+        _stereo_image_epoch = _pending_epoch;
+        _pair_state = res.pair_state;
+    } else _pair_pixels.clear();
     _tex_w = res.W;
     _tex_h = res.H;
 }
@@ -1798,7 +1857,16 @@ void ViewportPanel::draw_nav_controls() {
 
 void ViewportPanel::draw(bool training, int step) {
     const float y0 = ImGui::GetCursorPosY();
+    refresh_stereo();
     draw_controls(_mode == Mode::Engine);
+    if (stereo::settings().enabled) {
+        namespace text = spirula::i18n::msg::stereo;
+        using State = spirula::stereo::CameraPair::State;
+        if (_pair_state == State::NoLimits) ui::TextWrapped(stereo::translated(text::no_limits,text::no_limits_pl));
+        else if (_pair_state == State::ZeroLimits) ui::TextWrapped(stereo::translated(text::zero_limits,text::zero_limits_pl));
+        else if (_pair_state == State::NoSupport) ui::TextWrapped(stereo::translated(text::no_support,text::no_support_pl));
+    }
+
     _controls_h = ImGui::GetCursorPosY() - y0;
     if (_controls_pad > 0.0f) ImGui::Dummy(ImVec2(1.0f, _controls_pad));
 
@@ -2058,6 +2126,7 @@ int ViewportPanel::idle_step_interval() const {
 }
 
 void ViewportPanel::pump_engine(bool training, const ImVec2& avail, int step) {
+    refresh_stereo();
     const double now = ImGui::GetTime();
     if (_shot_inflight) poll_capture();
 
@@ -2069,7 +2138,7 @@ void ViewportPanel::pump_engine(bool training, const ImVec2& avail, int step) {
             if (res.secs > 0) _render_secs = _render_secs > 0
                 ? 0.8 * _render_secs + 0.2 * res.secs : res.secs;
             if (res.error.empty()) {
-                upload(res);
+                if (_pending_epoch == _stereo_epoch) upload(res);
                 _last_error.clear();
                 if (_tool_pick_inflight) {
                     _tool_pick_inflight = false;
@@ -2089,6 +2158,10 @@ void ViewportPanel::pump_engine(bool training, const ImVec2& avail, int step) {
 
     int W = 0, H = 0;
     render_size(avail, W, H);
+    if (stereo::settings().enabled) {
+        W = stereo::settings().eye_width;
+        H = std::clamp((int)std::lround(W*avail.y/avail.x),1,4096);
+    }
     if (W != _tex_w || H != _tex_h) _dirty = true;
     bool live = false;
     if (training && _auto_refresh) {
@@ -2116,7 +2189,12 @@ void ViewportPanel::pump_engine(bool training, const ImVec2& avail, int step) {
             q.pick_py = (int)(_dbl_v * (float)H);
             _dbl_pending = false;
         }
-        _pending = _worker.submit(q);
+        _pending_epoch = _stereo_epoch;
+        if (stereo::settings().enabled) {
+            std::optional<spirula::stereo::DepthLimits> limits;
+            if (_stereo_limits) limits = spirula::stereo::DepthLimits{_stereo_limits->sunk,_stereo_limits->popped};
+            _pending = _worker.submit_stereo(q,nav_dist()/_m2s_scale,limits);
+        } else _pending = _worker.submit(q);
         _last_submit = now;
         _last_render_step = step;
         _dirty = false;
@@ -2252,6 +2330,7 @@ void ViewportPanel::draw_engine(bool training, const ImVec2& avail, int step) {
         ImGui::SetCursorPos(ImVec2(ImGui::GetCursorPosX() + pad.x,
                                    ImGui::GetCursorPosY() + pad.y));
         ImGui::Image((ImTextureID)(intptr_t)_tex, size);
+        present_stereo();
         const ImVec2 tl = ImGui::GetItemRectMin();
         draw_grid_overlay(tl.x + 8, tl.y + 6, 0);
         handle_input(size.y);

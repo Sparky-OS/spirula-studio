@@ -1,0 +1,53 @@
+#pragma once
+#include "i18n/BeginCatalog.h"
+
+namespace spirula::i18n::msg::stereo {
+SS_MSG(enable,
+    EN("Enable 3D"), JA("3D を有効にする"), ZH_HANS("启用 3D"), ZH_HANT("啟用 3D"),
+    KO("3D 사용"), DE("3D aktivieren"), FR("Activer la 3D"), ES("Activar 3D"),
+    PT("Ativar 3D"), IT("Attiva 3D"), NL("3D inschakelen"), RU("Включить 3D"), TR("3B'yi etkinleştir"));
+SS_MSG(resolution,
+    EN("Render width per eye"), JA("片目あたりの描画幅"), ZH_HANS("每眼渲染宽度"), ZH_HANT("每眼算繪寬度"),
+    KO("눈별 렌더링 너비"), DE("Renderbreite pro Auge"), FR("Largeur de rendu par œil"), ES("Ancho de renderizado por ojo"),
+    PT("Largura de renderização por olho"), IT("Larghezza di rendering per occhio"), NL("Renderbreedte per oog"), RU("Ширина рендера для каждого глаза"), TR("Göz başına işleme genişliği"));
+SS_MSG(display_settings,
+    EN("Display Settings"), JA("ディスプレイ設定"), ZH_HANS("显示设置"), ZH_HANT("顯示設定"),
+    KO("디스플레이 설정"), DE("Anzeigeeinstellungen"), FR("Configuration de l’affichage"), ES("Configuración de pantalla"),
+    PT("Configurações de tela"), IT("Impostazioni dello schermo"), NL("Beeldscherminstellingen"), RU("Настройки экрана"), TR("Ekran ayarları"));
+SS_MSG(no_limits,
+    EN("No depth limits received. The two pictures are identical."), JA("奥行きの制限を受信していません。左右に同じ画像を表示します。"),
+    ZH_HANS("未收到深度限制。双眼显示相同图像。"), ZH_HANT("未收到深度限制。雙眼顯示相同影像。"),
+    KO("깊이 한도를 받지 못했습니다. 양쪽 눈에 같은 그림을 표시합니다."), DE("Keine Tiefengrenzen erhalten. Die Bilder sind identisch."),
+    FR("Pas de limites de profondeur. Les images sont identiques."), ES("Sin límites de profundidad. Las imágenes son idénticas."),
+    PT("Sem limites de profundidade. As imagens são idênticas."), IT("Limiti di profondità assenti. Le immagini sono identiche."),
+    NL("Geen dieptegrenzen ontvangen. De beelden zijn gelijk."), RU("Нет пределов глубины. Изображения одинаковые."), TR("Derinlik sınırı alınmadı. İki resim de aynı."));
+SS_MSG(zero_limits,
+    EN("At zero depth limits, the two pictures are identical."), JA("奥行きの制限はゼロです。左右に同じ画像を表示します。"),
+    ZH_HANS("深度限制为零。双眼显示相同图像。"), ZH_HANT("深度限制為零。雙眼顯示相同影像。"),
+    KO("깊이 한도가 0입니다. 양쪽 눈에 같은 그림을 표시합니다."), DE("Die Tiefengrenzen sind null. Die Bilder sind identisch."),
+    FR("Limites de profondeur nulles. Les images sont identiques."), ES("Profundidad limitada a cero. Las imágenes son idénticas."),
+    PT("Limites de profundidade em zero. As imagens são idênticas."), IT("Limiti di profondità a zero. Le immagini sono identiche."),
+    NL("Dieptegrenzen op nul. De beelden zijn gelijk."), RU("Пределы глубины равны нулю. Изображения одинаковые."), TR("Derinlik sınırları sıfır. İki resim de aynı."));
+SS_MSG(no_support,
+    EN("No finite scene depth. The two pictures are identical."), JA("有限のシーン深度を決定できません。左右に同じ画像を表示します。"),
+    ZH_HANS("无法确定有限的场景深度。双眼显示相同图像。"), ZH_HANT("無法確定有限的場景深度。雙眼顯示相同影像。"),
+    KO("유한한 장면 깊이를 구할 수 없습니다. 양쪽 눈에 같은 그림을 표시합니다."), DE("Keine endliche Szenentiefe. Die Bilder sind identisch."),
+    FR("Profondeur non finie. Les images sont identiques."), ES("Profundidad no finita. Las imágenes son idénticas."),
+    PT("Profundidade não finita. As imagens são idênticas."), IT("Profondità non finita. Le immagini sono identiche."),
+    NL("Geen eindige scènediepte. De beelden zijn gelijk."), RU("Глубина сцены не конечна. Изображения одинаковые."), TR("Sahne derinliği sonlu değil. İki resim de aynı."));
+SS_MSG(settings_failed,
+    EN("Could not open Display Settings."), JA("ディスプレイ設定を開けませんでした。"), ZH_HANS("无法打开显示设置。"), ZH_HANT("無法開啟顯示設定。"),
+    KO("디스플레이 설정을 열지 못했습니다."), DE("Anzeigeeinstellungen konnten nicht geöffnet werden."), FR("Impossible d’ouvrir la configuration de l’affichage."), ES("No se pudo abrir la configuración de pantalla."),
+    PT("Não foi possível abrir as configurações de tela."), IT("Impossibile aprire le impostazioni dello schermo."), NL("Kan de beeldscherminstellingen niet openen."), RU("Не удалось открыть настройки экрана."), TR("Ekran ayarları açılamadı."));
+
+// Upstream has no Polish locale; the edition's additions still carry Polish.
+constexpr Msg with_polish(Msg message, const char* text) { message.v[unsigned(Lang::en)] = text; return message; }
+inline constexpr auto enable_pl = with_polish(enable,"Włącz 3D");
+inline constexpr auto resolution_pl = with_polish(resolution,"Szerokość renderowania na oko");
+inline constexpr auto display_settings_pl = with_polish(display_settings,"Ustawienia ekranu");
+inline constexpr auto no_limits_pl = with_polish(no_limits,"Brak limitów głębi. Oba obrazy są identyczne.");
+inline constexpr auto zero_limits_pl = with_polish(zero_limits,"Zerowe limity głębi. Oba obrazy są identyczne.");
+inline constexpr auto no_support_pl = with_polish(no_support,"Głębia sceny nie jest skończona. Oba obrazy są identyczne.");
+inline constexpr auto settings_failed_pl = with_polish(settings_failed,"Nie można otworzyć ustawień ekranu.");
+}  // namespace spirula::i18n::msg::stereo
+#include "i18n/EndCatalog.h"

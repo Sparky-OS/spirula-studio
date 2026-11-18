@@ -9,6 +9,7 @@
 #include "data/DatasetParser.h"
 #include "app/gui/NavCamera.h"
 #include "app/gui/PreviewRenderer.h"
+#include "app/gui/stereo/NativeViewport.h"
 #include "app/gui/ViewportInput.h"
 
 #include <array>
@@ -320,6 +321,16 @@ private:
     void build_request(ViewRequest& q, int W, int H) const;
     void view_matrix(float out[16]) const;   // row-major world-to-view
     void upload(const ViewResult& res);
+    void refresh_stereo();
+    void present_stereo();
+    stereo::NativeViewport _stereo_view;
+    uint64_t _stereo_settings_revision = ~uint64_t(0), _stereo_epoch = 0, _pending_epoch = 0;
+    uint64_t _stereo_image_epoch = 0, _pair_revision = 0;
+    std::optional<stereo::Limits> _stereo_limits;
+    std::vector<uint8_t> _pair_pixels;
+    spirula::stereo::CameraPair::State _pair_state = spirula::stereo::CameraPair::State::NoLimits;
+    std::array<float,4> _stereo_hole{};
+
     void draw_controls(bool engine);
     void handle_input(float item_h);         // mouse/keys/gamepad on last item
     void draw_engine(bool training, const ImVec2& avail, int step);

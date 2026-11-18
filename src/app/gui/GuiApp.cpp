@@ -1,6 +1,7 @@
 // GuiApp.cpp -- see GuiApp.h.
 
 #include "app/gui/GuiApp.h"
+#include "app/gui/stereo/Settings.h"
 #include "i18n/catalog/Dense.h"
 #include "roma/model/Fetch.h"
 #include "dense/ConfigFields.h"
@@ -433,6 +434,7 @@ void GuiApp::load_settings() {
     FILE* f = std::fopen(settings_path().c_str(), "r");
     if (!f) {
         spirula::i18n::init(spirula::i18n::lang_arg(), nullptr);
+        stereo::init_language(nullptr);
         return;
     }
     char line[1024];
@@ -442,7 +444,7 @@ void GuiApp::load_settings() {
         size_t eq = s.find('=');
         if (eq == std::string::npos) continue;
         std::string k = s.substr(0, eq), v = s.substr(eq + 1);
-        if (_recent.read_setting(k, v)) continue;
+        if (_recent.read_setting(k, v) || stereo::read_setting(k,v)) continue;
         if (k == "colmap_exe" && !v.empty()) _colmap_exe = tool_in_folder(v, "colmap");
         else if (k == "ffmpeg_exe" && !v.empty()) _ffmpeg_exe = tool_in_folder(v, "ffmpeg");
         else if (k == "sfm_engine") _engine = v == "colmap" ? Engine::Colmap
@@ -486,6 +488,7 @@ void GuiApp::load_settings() {
     // value simply applied. Passing lang_arg() back in is what keeps --lang
     // winning even though it was parsed in main() long before this ran.
     spirula::i18n::init(spirula::i18n::lang_arg(), saved_lang.c_str());
+    stereo::init_language(saved_lang.c_str());
 }
 
 void GuiApp::save_settings() {
@@ -497,13 +500,14 @@ void GuiApp::save_settings() {
     FILE* f = std::fopen(tmp.c_str(), "w");
     if (!f) return;
     _recent.write_settings(f);
+    stereo::write_settings(f);
     std::fprintf(f, "colmap_exe=%s\n", _colmap_exe.c_str());
     std::fprintf(f, "ffmpeg_exe=%s\n", _ffmpeg_exe.c_str());
     std::fprintf(f, "sfm_engine=%s\n",
                  _engine == Engine::Colmap ? "colmap" : "builtin");
     std::fprintf(f, "batch_command=%s\n", escape_setting(_batch_cmd).c_str());
     std::fprintf(f, "additional_gpus=%s\n", escape_setting(_additional_gpus).c_str());
-    std::fprintf(f, "lang=%s\n", spirula::i18n::code(spirula::i18n::current()));
+    std::fprintf(f, "lang=%s\n", stereo::polish() ? "pl" : spirula::i18n::code(spirula::i18n::current()));
     std::fprintf(f, "ui_scale=%.3f\n", _scale.user());
     std::fprintf(f, "panel_w=%.1f\n", _panel_w);
     std::fprintf(f, "ds_panel_w=%.1f\n", _ds_panel_w);
@@ -3868,6 +3872,8 @@ void GuiApp::draw_menu_bar() {
         ImGui::EndMenu();
     }
     if (ui::BeginMenu(msg::menu_view)) {
+        if (stereo::draw_settings()) save_settings();
+        ImGui::Separator();
         if (ui::MenuItem(msg::menu_show_log, nullptr, &_show_log))
             _layout_dirty = true;
         if (ui::MenuItem(msg::menu_show_settings, nullptr, &_show_settings))
@@ -3956,7 +3962,8 @@ void GuiApp::draw_language_menu() {
 
     for (unsigned i = 0; i < i18n::kLangCount; i++) {
         const i18n::Lang l = i18n::Lang(i);
-        if (ui::SelectableRaw(i18n::native_name(l), l == before) && l != before) {
+        if (ui::SelectableRaw(i18n::native_name(l), l == before) && (l != before || stereo::polish())) {
+            stereo::explicit_language();
             i18n::set_current(l);
             save_settings();
         }
