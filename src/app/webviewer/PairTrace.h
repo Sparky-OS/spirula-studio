@@ -22,7 +22,7 @@ inline void trace_bytes(const std::string& path, const void* data, size_t size) 
 }
 
 inline void mark_pair_trace(std::vector<uint8_t>& pair, uint64_t request, int step, int width, int height) {
-    if (width<128 || height<128 || request>0xffffff || step>0xfffffe)
+    if (width<256 || height<256 || request>0xffffff || step>0xfffffe)
         throw std::runtime_error("viewer trace: witness exceeds its raster or counter range");
     uint8_t bytes[9] = {0xd3,0x7a};
     for (int i=0;i<3;++i) {
@@ -37,9 +37,12 @@ inline void mark_pair_trace(std::vector<uint8_t>& pair, uint64_t request, int st
     bytes[8] = crc;
     for (int bit=0;bit<72;++bit) {
         const uint8_t value = (bytes[bit/8]>>(bit%8))&1 ? 255 : 0;
-        const int x0 = 8+(bit%9)*12, y0 = 8+(bit/9)*12;
-        for (int eye=0;eye<2;++eye) for (int y=y0;y<y0+12;++y) for (int x=x0;x<x0+12;++x)
-            for (int c=0;c<3;++c) pair[((size_t)y*2*width+eye*width+x)*3+c] = value;
+        for (int site=0;site<2;++site) {
+            const int x0 = (site ? width-116 : 8)+(bit%9)*12;
+            const int y0 = (site ? height-104 : 8)+(bit/9)*12;
+            for (int eye=0;eye<2;++eye) for (int y=y0;y<y0+12;++y) for (int x=x0;x<x0+12;++x)
+                for (int c=0;c<3;++c) pair[((size_t)y*2*width+eye*width+x)*3+c] = value;
+        }
     }
 }
 
