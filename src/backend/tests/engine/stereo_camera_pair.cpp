@@ -1,4 +1,5 @@
 #include "app/stereo/CameraPair.h"
+#include "app/stereo/VisibleDepth.h"
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -42,6 +43,19 @@ int main(int argc, char**) {
                 if (pair.state == CameraPair::State::Ready) throw std::runtime_error("missing flat explanation");
             }
         }
+        VisibleDepth line(1,1,1,1,0,1,10,false);
+        line.segment({-4,0,2},{0,0,4});
+        close(line.range().z_min,8./3.); close(line.range().z_max,4);
+        VisibleDepth face(1,1,1,1,0,1,10,false);
+        face.triangle({-4,-1,2},{-4,1,2},{0,0,4});
+        close(face.range().z_min,8./3.); close(face.range().z_max,4);
+        VisibleDepth capsule(1,1,1,1,0,1,10,false);
+        capsule.segment({0,0,3},{0,0,3},.2);
+        close(capsule.range().z_min,2.8); close(capsule.range().z_max,3.2);
+        VisibleDepth hidden(1,1,1,1,0,1,10,false);
+        hidden.segment({0,0,-3},{0,0,-1});
+        if (hidden.range().z_min <= hidden.range().z_max)
+            throw std::runtime_error("hidden geometry changed the camera fit");
         const DepthLimits limits{10,4};
         const double focal = 1000, convergence = 3, z = 1, radius = 2;
         const ParallaxRange gaussian{1/convergence-1/z+radius/(z*z),1/z-1/convergence+radius/(z*z),true};

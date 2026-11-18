@@ -42,6 +42,6 @@ void region_outline(const RegionOverlay::Layer& l, const float eye[3], std::vect
 // OpenGL basis; orthographic depth is axial.
 void draw_region_overlay(const RegionOverlay& ov, uint8_t* rgb, int W, int H, const float* ray_depth,
                          const float c2w[12], float fx, float fy, float cx, float cy,
-                         bool orthographic = false);
+                         bool orthographic = false, float shear = 0);
 
 }  // namespace spirula

@@ -27,6 +27,7 @@ namespace {
 const char* kProj = R"(
 uniform int u_model;
 uniform vec2 u_s;
+uniform vec2 u_eye;
 uniform int u_tier;
 uniform float u_dist[8];
 // The engine's lens tiers (shaders/projection_utils.slang), in its CV
@@ -65,12 +66,12 @@ vec2 project_ndc(vec3 v, out bool clipped) {
     clipped = false;
     if (u_model == 4) {
         clipped = v.z >= 0.0;
-        return u_s * v.xy;
+        return u_s * vec2(v.x-u_eye.y*v.z,v.y);
     } else if (u_model == 0) {                     // pinhole
         if (v.z > -1e-6) clipped = true;
         vec2 q = v.xy / -v.z;
         if (!lens_valid(q)) clipped = true;
-        return u_s * lens(q);
+        return u_s * lens(q) + vec2(u_eye.x,0);
     } else if (u_model == 3) {              // equirectangular
         float lon = atan(v.x, -v.z);
         float lat = asin(clamp(v.y / dist, -1.0, 1.0));
@@ -429,6 +430,7 @@ bool PreviewRenderer::ensure_program() {
     _u_dash = glx::GetUniformLocation(_prog, "u_dash");
     _u_model = glx::GetUniformLocation(_prog, "u_model");
     _u_s = glx::GetUniformLocation(_prog, "u_s");
+    _u_eye = glx::GetUniformLocation(_prog, "u_eye");
     _u_zrange = glx::GetUniformLocation(_prog, "u_zrange");
     _u_vp = glx::GetUniformLocation(_prog, "u_vp");
     _u_points = glx::GetUniformLocation(_prog, "u_points");
@@ -502,6 +504,7 @@ bool PreviewRenderer::ensure_mesh_program() {
     _mu_view = glx::GetUniformLocation(_mprog, "u_view");
     _mu_model = glx::GetUniformLocation(_mprog, "u_model");
     _mu_s = glx::GetUniformLocation(_mprog, "u_s");
+    _mu_eye = glx::GetUniformLocation(_mprog, "u_eye");
     _mu_zrange = glx::GetUniformLocation(_mprog, "u_zrange");
     _mu_vp = glx::GetUniformLocation(_mprog, "u_vp");
     _mu_mode = glx::GetUniformLocation(_mprog, "u_mode");
@@ -612,6 +615,9 @@ void PreviewRenderer::ensure_grid(float scene_radius, float view_dist,
     glx::BufferData(GL_ARRAY_BUFFER, (glx::glSizeiptr)(g.size() * sizeof(VL)),
                     g.data(), GL_STATIC_DRAW);
     glx::BindVertexArray(0);
+    _grid_xyz.clear();
+    for (const auto& vertex : g)
+        _grid_xyz.insert(_grid_xyz.end(),{vertex.px,vertex.py,vertex.pz});
     _num_grid_verts = (int64_t)g.size();
     _grid_spacing = s;
     _grid_half = half;
@@ -749,6 +755,7 @@ bool PreviewRenderer::build(const meshing::MeshData& mesh,
         _pick_xyz[3*i + 1] = verts[i].py;
         _pick_xyz[3*i + 2] = verts[i].pz;
     }
+    _mesh_indices = idx;
     _num_points = 0;   // the mesh replaces the cloud, it does not add to it
     _built = true;
     _gl_ok = true;
@@ -1005,6 +1012,11 @@ bool PreviewRenderer::build(const ParsedDataset& ds, const PostSplitCameras& pos
     };
     make_vao(_vao_pts, _vbo_pts, pts.get(), (size_t)n_pts * sizeof(V),
              sizeof(V), false);
+    _camera_vertices.clear();
+    for (int64_t i = 0; i < n_cam_verts; ++i) {
+        const auto& v = cams[i];
+        _camera_vertices.insert(_camera_vertices.end(),{v.px,v.py,v.pz,v.ax,v.ay,v.az});
+    }
     _pts_stride = stride;
     _pts_tinted = false;
     make_vao(_vao_cam, _vbo_cam, cams.get(), (size_t)n_cam_verts * sizeof(VL),
@@ -1071,12 +1083,15 @@ bool PreviewRenderer::ensure_fbo(int W, int H) {
     return ok;
 }
 
-unsigned PreviewRenderer::render(int W, int H, const float view[16],
+unsigned PreviewRenderer::render(int W, int H, const float centre_view[16],
                                  PreviewProjection proj, float sx, float sy,
                                  float scene_radius, float view_dist,
                                  const float view_target[3], bool show_cams,
                                  float frustum_scale, bool show_grid,
-                                 const PreviewStyle* style) {
+                                 const PreviewStyle* style, const spirula::stereo::EyeCamera* eye) {
+    float view[16];
+    std::copy(centre_view,centre_view+16,view);
+    if (eye) view[3] -= eye->offset;
     if (!_built || !_gl_ok || W < 1 || H < 1) return 0;
     if (!ensure_fbo(W, H)) return 0;
     static const PreviewStyle kViewport;
@@ -1103,6 +1118,7 @@ unsigned PreviewRenderer::render(int W, int H, const float view[16],
         glx::UniformMatrix4fv(_mu_view, 1, GL_TRUE, view);
         glx::Uniform1i(_mu_model, (int)proj);
         glx::Uniform2f(_mu_s, sx, sy);
+        glx::Uniform2f(_mu_eye,eye ? 2*eye->principal/W : 0,eye ? eye->shear : 0);
         glx::Uniform2f(_mu_zrange, zn, zf);
         glx::Uniform2f(_mu_vp, (float)W, (float)H);
         glx::Uniform1i(_mu_mode, _mesh_mode);
@@ -1127,6 +1143,7 @@ unsigned PreviewRenderer::render(int W, int H, const float view[16],
     glx::UniformMatrix4fv(_u_view, 1, GL_TRUE, view);
     glx::Uniform1i(_u_model, (int)proj);
     glx::Uniform2f(_u_s, sx, sy);
+    glx::Uniform2f(_u_eye,eye ? 2*eye->principal/W : 0,eye ? eye->shear : 0);
     glx::Uniform2f(_u_zrange, zn, zf);
     glx::Uniform2f(_u_vp, (float)W, (float)H);
     set_style_uniforms(0, st);
@@ -1210,7 +1227,7 @@ unsigned PreviewRenderer::render(int W, int H, const float view[16],
         }
     }
 
-    if (_ov_visible && _ov) draw_overlay(view, proj == PreviewProjection::Orthographic);
+    if (_ov_visible && _ov) draw_overlay(view, proj == PreviewProjection::Orthographic,eye ? eye->shear : 0);
 
     glx::BindVertexArray(0);
     glx::UseProgram(0);
@@ -1233,6 +1250,7 @@ void PreviewRenderer::destroy_mesh_gl() {
         glDeleteTextures(1, &t);
     }
     _vbo_mesh = _ebo_mesh = _vao_mesh = _tex_mesh = 0;
+    _mesh_indices.clear();
     _num_mesh_idx = 0;
     _mesh_mode = 0;
 }
@@ -1335,7 +1353,7 @@ void PreviewRenderer::upload_overlay() {
 
 // A translucent fill that writes no depth, then the silhouette dashed; the
 // outline follows the eye, so it is rebuilt every frame.
-void PreviewRenderer::draw_overlay(const float view[16], bool orthographic) {
+void PreviewRenderer::draw_overlay(const float view[16], bool orthographic, float shear) {
     if (_ov != _ov_uploaded) upload_overlay();
     if (!_ov_local || !_vao_ov) return;
     float eye[3];
@@ -1357,9 +1375,11 @@ void PreviewRenderer::draw_overlay(const float view[16], bool orthographic) {
     std::vector<VL> lines;
     std::vector<int64_t> first;
     std::vector<float> seg;
+    float toward_eye[3];
+    for (int i = 0; i < 3; ++i) toward_eye[i] = view[8+i]+shear*view[i];
     for (const spirula::RegionOverlay::Layer& l : layers) {
         first.push_back((int64_t)lines.size());
-        spirula::region_outline(l, eye, seg, orthographic ? view + 8 : nullptr);
+        spirula::region_outline(l, eye, seg, orthographic ? toward_eye : nullptr);
         for (size_t i = 0; i + 6 <= seg.size(); i += 6) {
             const float* a = &seg[i];
             const float* b = &seg[i + 3];
@@ -1415,6 +1435,8 @@ void PreviewRenderer::destroy_gl() {
     _built = false;
     _num_points = _num_cam_verts = _num_cam_sel = _num_cam_bright = 0;
     std::vector<float>().swap(_pick_xyz);
+    _grid_xyz.clear();
+    _camera_vertices.clear();
     std::vector<float>().swap(_pts_rgb);
     _pts_stride = 1;
     _pts_tinted = false;

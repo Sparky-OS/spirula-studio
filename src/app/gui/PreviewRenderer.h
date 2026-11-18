@@ -4,6 +4,7 @@
 // Projection models match the engine viewer.
 
 #include "app/gui/render/TransitionFx.h"
+#include "app/stereo/CameraPair.h"
 #include "data/DatasetParser.h"
 #include "mesh/MeshExport.h"   // meshing::MeshData
 
@@ -95,7 +96,15 @@ public:
                     float scene_radius, float view_dist,
                     const float view_target[3], bool show_cams,
                     float frustum_scale, bool show_grid,
-                    const PreviewStyle* style = nullptr);
+                    const PreviewStyle* style = nullptr,
+                    const spirula::stereo::EyeCamera* eye = nullptr);
+
+    spirula::stereo::CameraPair stereo_cameras(
+        std::optional<spirula::stereo::DepthLimits> limits, const float view[16],
+        PreviewProjection projection, double focal, double fy, int W, int H,
+        float scene_radius, float view_dist, const float target[3],
+        bool cameras, float frustum_scale, bool grid);
+    std::vector<uint8_t> read_rgb() const;
 
     // A region's boundary drawn over the cloud (app/webviewer/RegionOverlay.h),
     // in the frame the built points are in; null for none. Survives a rebuild.
@@ -126,6 +135,7 @@ private:
     bool _gl_ok = false;
     unsigned _prog = 0;
     int _u_view = -1, _u_scale = -1, _u_dscale = -1, _u_color = -1;
+    int _u_eye = -1, _mu_eye = -1;
     int _u_model = -1, _u_s = -1, _u_zrange = -1, _u_vp = -1;
     // Style uniforms, one set per program: [0] lines and points, [1] mesh.
     struct StyleLoc {
@@ -166,6 +176,8 @@ private:
     int64_t _num_points = 0;
     // Normalized-frame points for double-click picking.
     std::vector<float> _pick_xyz;
+    std::vector<uint32_t> _mesh_indices;
+    std::vector<float> _grid_xyz, _camera_vertices;
     std::vector<float> _pts_rgb;   // the displayed points' own colours
     int64_t _pts_stride = 1;
     bool _pts_tinted = false;
@@ -188,7 +200,7 @@ private:
     std::vector<float> _ov_dash;      // per layer, dash period
     int _u_alpha = -1, _u_dash = -1;
     void upload_overlay();
-    void draw_overlay(const float view[16], bool orthographic);
+    void draw_overlay(const float view[16], bool orthographic, float shear);
     void destroy_overlay_gl();
 
     unsigned _fbo = 0, _color_tex = 0, _depth_rb = 0;

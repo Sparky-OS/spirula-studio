@@ -104,7 +104,7 @@ void region_outline(const RegionOverlay::Layer& l, const float eye[3], std::vect
 
 void draw_region_overlay(const RegionOverlay& ov, uint8_t* rgb, int W, int H, const float* ray_depth,
                          const float c2w[12], float fx, float fy, float cx, float cy,
-                         bool orthographic) {
+                         bool orthographic, float shear) {
     if (ov.empty() || W <= 0 || H <= 0) return;
     // CV camera axes are the OpenGL ones with y and z negated.
     float R[3][3];
@@ -117,6 +117,7 @@ void draw_region_overlay(const RegionOverlay& ov, uint8_t* rgb, int W, int H, co
     auto to_cam = [&](const float* p, float c[3]) {
         const float d[3] = {p[0] - eye[0], p[1] - eye[1], p[2] - eye[2]};
         for (int r = 0; r < 3; r++) c[r] = R[r][0] * d[0] + R[r][1] * d[1] + R[r][2] * d[2];
+        c[0] += shear*c[2];
     };
     // Scene distance of a pixel, converted to depth along the view axis.
     const size_t npx = (size_t)W * H;
@@ -144,7 +145,7 @@ void draw_region_overlay(const RegionOverlay& ov, uint8_t* rgb, int W, int H, co
                 const float z = scene_z[(size_t)y * W + x];
                 if (!std::isfinite(z)) continue;
                 const float scale = orthographic ? 1.0f : z;
-                const float cvx = (x + 0.5f - cx) / fx * scale, cvy = (y + 0.5f - cy) / fy * scale;
+                const float cvx = (x + 0.5f - cx) / fx * scale - shear*z, cvy = (y + 0.5f - cy) / fy * scale;
                 double p[3];
                 for (int r = 0; r < 3; r++)
                     p[r] = eye[r] + R[0][r] * cvx + R[1][r] * cvy + R[2][r] * z + ov.shift[r];
@@ -205,7 +206,7 @@ void draw_region_overlay(const RegionOverlay& ov, uint8_t* rgb, int W, int H, co
         }
 
         std::vector<float> seg;
-        const float to_eye[3] = {c2w[2], c2w[6], c2w[10]};
+        const float to_eye[3] = {c2w[2]+shear*c2w[0], c2w[6]+shear*c2w[4], c2w[10]+shear*c2w[8]};
         region_outline(l, eye, seg, orthographic ? to_eye : nullptr);
         for (size_t s = 0; s + 6 <= seg.size(); s += 6) {
             float a[3], b[3];

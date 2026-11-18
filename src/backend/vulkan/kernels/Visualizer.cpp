@@ -1,3 +1,4 @@
+#include "engine/EngineViewerGeometry.h"
 // Vulkan implementation of the visualizer entry points defined in
 // kernels/visualize/Visualizer.cu: engine_viewer_init / set_camera_size / set_grid /
 // capture_thumbnails, engine_blit_view, blit_train_cameras_tensor, plus the
@@ -686,6 +687,11 @@ void engine_viewer_capture_thumbnails(TorchTensorView cam_indices_tv) {
     p.has_alpha = d_alpha_mask ? 1 : 0;
     vkk::dispatch("visualizer.vis_update_thumbnails", backend::vk::SpecList{},
                  (uint32_t)B_post, 1, 1, &p, sizeof(p));
+}
+
+const EngineViewerGeometryOps& engine_viewer_geometry_ops() {
+    static const EngineViewerGeometryOps ops{&viewer_mutex(),&_viewer_build_grid,&_viewer_build_bvh};
+    return ops;
 }
 
 /*[AutoHeaderGeneratorExport]*/

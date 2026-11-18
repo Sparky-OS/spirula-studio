@@ -1910,8 +1910,14 @@ void ViewportPanel::draw(bool training, int step) {
 }
 
 unsigned ViewportPanel::pump_preview(const ImVec2& avail, int& W, int& H) {
+    refresh_stereo();
+    const bool stereo_on = stereo::settings().enabled;
     W = (int)std::clamp(avail.x, 64.0f, 4096.0f);
     H = (int)std::clamp(avail.y, 64.0f, 4096.0f);
+    if (stereo_on) {
+        W = stereo::settings().eye_width;
+        H = std::clamp((int)std::lround(W*avail.y/avail.x),1,4096);
+    }
     float view[16];
     view_matrix(view);
     float fx, fy;
@@ -1923,13 +1929,36 @@ unsigned ViewportPanel::pump_preview(const ImVec2& avail, int& W, int& H) {
     _preview.dim_points_outside(_roi_points_inside, _show_roi);
     PreviewStyle style;
     style.point_px = _point_px;
-    _preview_tex = _preview.render(W, H, view,
-                                   (PreviewProjection)_cam_model,
-                                   fx / (0.5f * W), fy / (0.5f * H),
-                                   _home_dist, nav_dist() / _m2s_scale, target,
-                                   _show_cams, _frustum_scale,
-                                   _show_grid && !external_grid(),
-                                   &style);
+    auto render = [&](const spirula::stereo::EyeCamera* eye) {
+        return _preview.render(W,H,view,(PreviewProjection)_cam_model,
+                               fx/(0.5f*W),fy/(0.5f*H),_home_dist,
+                               nav_dist()/_m2s_scale,target,_show_cams,_frustum_scale,
+                               _show_grid && !external_grid(),&style,eye);
+    };
+    if (!stereo_on) { _preview_tex = render(nullptr); return _preview_tex; }
+    std::optional<spirula::stereo::DepthLimits> limits;
+    if (_stereo_limits) limits = {_stereo_limits->sunk,_stereo_limits->popped};
+    const auto cameras = _preview.stereo_cameras(limits,view,(PreviewProjection)_cam_model,
+        fx,fy,W,H,_home_dist,nav_dist()/_m2s_scale,target,_show_cams,_frustum_scale,
+        _show_grid && !external_grid());
+    if (!render(&cameras.left)) return 0;
+    auto left = _preview.read_rgb();
+    auto right = left;
+    if (cameras.left.offset != cameras.right.offset || cameras.left.shear != cameras.right.shear) {
+        if (!render(&cameras.right)) return 0;
+        right = _preview.read_rgb();
+    }
+    ViewResult result;
+    result.W = W; result.H = H; result.views = 2; result.pair_state = cameras.state;
+    result.rgb8.resize(2*left.size());
+    const size_t row = (size_t)W*3;
+    for (int y = 0; y < H; ++y) {
+        std::copy_n(left.data()+y*row,row,result.rgb8.data()+2*y*row);
+        std::copy_n(right.data()+y*row,row,result.rgb8.data()+(2*y+1)*row);
+    }
+    _pending_epoch = _stereo_epoch;
+    upload(result);
+    _preview_tex = _tex;
     return _preview_tex;
 }
 
@@ -1943,10 +1972,12 @@ void ViewportPanel::draw_preview(const ImVec2& avail) {
         ui::TextDisabled(msg::viewport_render_failed);
         return;
     }
-    // FBO textures are bottom-up; flip V.
-    ImGui::Image((ImTextureID)(intptr_t)tex, ImVec2((float)W, (float)H),
-                 ImVec2(0, 1), ImVec2(1, 0));
-    handle_input((float)H);
+    const bool stereo_on = stereo::settings().enabled;
+    const ImVec2 size = stereo_on ? avail : ImVec2((float)W,(float)H);
+    ImGui::Image((ImTextureID)(intptr_t)tex,size,
+                 ImVec2(0,stereo_on ? 0 : 1),ImVec2(1,stereo_on ? 1 : 0));
+    if (stereo_on) present_stereo();
+    handle_input(size.y);
     if (_wipe_splits)
         draw_wipe(ImGui::GetItemRectMin(), ImGui::GetItemRectSize());
 

@@ -1,3 +1,4 @@
+#include "engine/EngineViewerGeometry.h"
 #include <cuda_runtime.h>
 #include <cstdint>
 #include <cub/cub.cuh>
@@ -1630,6 +1631,11 @@ void _viewer_build_bvh()
 }
 } // anonymous namespace
 
+
+const EngineViewerGeometryOps& engine_viewer_geometry_ops() {
+    static const EngineViewerGeometryOps ops{&viewer_mutex(),&_viewer_build_grid,&_viewer_build_bvh};
+    return ops;
+}
 
 /*[AutoHeaderGeneratorExport]*/
 void engine_blit_view(

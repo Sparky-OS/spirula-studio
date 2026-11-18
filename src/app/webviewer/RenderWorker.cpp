@@ -9,6 +9,7 @@
 #include "data/FrustumSize.h"
 #include "app/webviewer/RegionOverlay.h"
 #include "app/stereo/SceneSupport.h"
+#include "app/stereo/VisibleDepth.h"
 #include "core/Env.h"
 
 #include <algorithm>
@@ -204,6 +205,60 @@ struct RenderWorker::Impl {
                 support.z_max = std::max(support.z_max,p[2]+radius);
             } else support.sphere(p[0],p[1],p[2],radius,left,right,top,bottom,sweep);
             if (support.z_min <= 0 && first_unbounded < 0) { first_unbounded=i;bad_z=p[2];bad_radius=radius; }
+        }
+        const bool ortho = q.model == "ORTHOGRAPHIC";
+        const double half_sweep = request.limits->sunk*q.W/1920.*
+                                  (ortho ? 1 : request.convergence)/q.fx/2;
+        const double pp = ortho ? 0 : q.fx*half_sweep/request.convergence;
+        VisibleDepth auxiliary((q.cx+pp)/q.fx,(q.W-q.cx+pp)/q.fx,
+                               q.cy/q.fy,(q.H-q.cy)/q.fy,half_sweep,0,INFINITY,ortho);
+        auto point = [&](const float* p) {
+            VisibleDepth::Point result;
+            for (int r = 0; r < 3; ++r)
+                result[r] = (view[4*r]*p[0]+view[4*r+1]*p[1]+view[4*r+2]*p[2]+view[4*r+3])/scale;
+            return result;
+        };
+        float target[3];
+        for (int r = 0; r < 3; ++r) {
+            const auto& T = cfg.train_to_normalized;
+            target[r] = T[4*r]*q.grid_target[0]+T[4*r+1]*q.grid_target[1]+
+                        T[4*r+2]*q.grid_target[2]+T[4*r+3];
+        }
+        const auto geometry = engine_viewer_geometry(cfg.base_camera_size*std::max(q.cam_size_scale,1e-3f),
+            q.show_cams,q.show_grid,q.grid_dist*cfg.train_frame_scale,target);
+        for (size_t i = 0; i+8 <= geometry.capsules.size(); i += 8)
+            auxiliary.segment(point(&geometry.capsules[i]),point(&geometry.capsules[i+4]),
+                              std::max(geometry.capsules[i+3],geometry.capsules[i+7])/scale);
+        for (size_t i = 0; i+9 <= geometry.triangles.size(); i += 9)
+            auxiliary.triangle(point(&geometry.triangles[i]),point(&geometry.triangles[i+3]),
+                               point(&geometry.triangles[i+6]));
+        if (q.show_cams) for (const auto& segment : cfg.held_out_cameras) {
+            float ends[6];
+            for (int r = 0; r < 3; ++r) {
+                ends[r] = segment.origin[r]+cfg.base_camera_size*q.cam_size_scale*segment.a[r];
+                ends[3+r] = segment.origin[r]+cfg.base_camera_size*q.cam_size_scale*segment.b[r];
+            }
+            auxiliary.segment(point(ends),point(ends+3));
+        }
+        if (q.show_roi) {
+            std::shared_ptr<const spirula::RegionOverlay> ov;
+            { std::lock_guard<std::mutex> lock(mu); ov = overlay; }
+            if (ov) for (const auto& layer : ov->layers)
+                for (size_t i = 0; i+3 <= layer.tri.size(); i += 3)
+                    auxiliary.triangle(point(&layer.xyz[3*layer.tri[i]]),
+                                       point(&layer.xyz[3*layer.tri[i+1]]),
+                                       point(&layer.xyz[3*layer.tri[i+2]]));
+        }
+        const auto extra = auxiliary.range();
+        if (extra.z_max >= extra.z_min) {
+            if (ortho) {
+                support.z_min = std::min(support.z_min,extra.z_min*scale);
+                support.z_max = std::max(support.z_max,extra.z_max*scale);
+            } else {
+                projected.sunk = std::max(projected.sunk,1/request.convergence-1/extra.z_max);
+                projected.popped = std::max(projected.popped,1/extra.z_min-1/request.convergence);
+                projected.valid = true;
+            }
         }
         auto range = support.range(); range.z_min /= scale; range.z_max /= scale;
         const auto pair = q.model == "PINHOLE"
@@ -702,7 +757,7 @@ struct RenderWorker::Impl {
                     scene[(size_t)i] = a > 0.1f ? depth[(size_t)i] / std::min(a / 0.5f, 1.0f) : 0.0f;
                 }
                 spirula::draw_region_overlay(*ov, out_host.data(), W, H, scene.data(), c2w, intr[0], intr[1], q.cx, q.cy,
-                                             q.model == "ORTHOGRAPHIC");
+                                             q.model == "ORTHOGRAPHIC",q.view_shear);
             }
         };
         {
@@ -718,12 +773,13 @@ struct RenderWorker::Impl {
         if (q.show_cams && !cfg.held_out_cameras.empty()) {
             auto project = [&](const std::array<float, 3>& origin, const std::array<float, 3>& offset, double pixel[2]) {
                 double p[3], ray[3];
-                for (int k = 0; k < 3; k++) p[k] = origin[k] + cfg.base_camera_size*q.cam_size_scale*offset[k] - c2w[k*4+3];
-                for (int k = 0; k < 3; k++) ray[k] = (k ? -1 : 1)*(c2w[k]*p[0]+c2w[4+k]*p[1]+c2w[8+k]*p[2]);
+                for (int k = 0; k < 3; k++) p[k] = origin[k] + cfg.base_camera_size*q.cam_size_scale*offset[k];
+                for (int r = 0; r < 3; ++r)
+                    ray[r] = vm[4*r]*p[0]+vm[4*r+1]*p[1]+vm[4*r+2]*p[2]+vm[4*r+3];
                 const float dist[8] = {};
                 if (!camhost::project_ray(ray, (int)camera_model_from_name(q.model), 0, dist, pixel)) return false;
-                pixel[0] = pixel[0]*q.fx + q.cx;
-                pixel[1] = pixel[1]*q.fy + q.cy;
+                pixel[0] = pixel[0]*intr[0] + q.cx;
+                pixel[1] = pixel[1]*intr[1] + q.cy;
                 return std::isfinite(pixel[0]) && std::isfinite(pixel[1]);
             };
             for (const auto& line : cfg.held_out_cameras) {
