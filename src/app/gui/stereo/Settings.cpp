@@ -11,20 +11,8 @@
 
 namespace gui::stereo {
 namespace {
-Settings state;
 bool use_polish = false;
 bool settings_failed = false;
-}
-Settings& settings() { return state; }
-bool read_setting(const std::string& key, const std::string& value) {
-    if (key == "stereo_enabled") state.enabled = value == "1";
-    else if (key == "stereo_eye_width") state.eye_width = std::clamp(std::atoi(value.c_str()),256,4096);
-    else return false;
-    ++state.revision;
-    return true;
-}
-void write_settings(FILE* file) {
-    std::fprintf(file,"stereo_enabled=%d\nstereo_eye_width=%d\n",state.enabled,state.eye_width);
 }
 void init_language(const char* saved) {
     const char* locale = spirula::i18n::lang_arg();
@@ -52,6 +40,7 @@ const spirula::i18n::Msg& viewport_error(ViewError error) {
 }
 
 bool draw_settings() {
+    auto& state = settings();
     namespace msg = spirula::i18n::msg::stereo;
     bool changed = ui::MenuItem(translated(msg::enable,msg::enable_pl),nullptr,&state.enabled);
     if (state.enabled) {

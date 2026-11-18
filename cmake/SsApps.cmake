@@ -588,6 +588,11 @@ if(SS_BUILD_GUI)
         ${SS_SRC}/app/gui/Subprocess.cpp)
     ss_configure_app(command_argv_test)
 
+    add_executable(stereo_options_test
+        ${SS_SRC}/app/gui/tests/stereo_options_test.cpp
+        ${SS_SRC}/app/gui/stereo/SettingsIO.cpp)
+    ss_configure_app(stereo_options_test)
+
     add_executable(preview_stereo_test
         ${SS_SRC}/app/gui/tests/preview_stereo_test.cpp
         ${SS_SRC}/app/gui/PreviewRenderer.cpp
