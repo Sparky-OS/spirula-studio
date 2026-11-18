@@ -16,6 +16,8 @@ int main() {
         sh[6] = 1;
         engine_scene_set_data_3dgs(0,1,host(mean,{1,3}),host(quat,{1,4}),host(scale,{1,3}),
                                    host(opacity,{1,1}),host(dc,{1,3}),host(sh,{1,3,3}),0);
+        engine_scene_activate(0);
+        if (engine_get_cur_num_splats() != 1) throw std::runtime_error("scene did not activate");
         const float black[3] = {};
         engine_init_background_color(black,0,false);
         for (float shear : {-0.3f,0.0f,0.3f}) {
