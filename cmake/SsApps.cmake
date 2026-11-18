@@ -289,10 +289,28 @@ if(SS_BUILD_GUI)
 
     file(GLOB SS_GUI_SOURCES CONFIGURE_DEPENDS
         ${SS_SRC}/app/gui/*.cpp ${SS_SRC}/app/gui/edit/*.cpp
-        ${SS_SRC}/app/gui/render/*.cpp ${SS_SRC}/app/gui/mask/*.cpp)
+        ${SS_SRC}/app/gui/render/*.cpp ${SS_SRC}/app/gui/mask/*.cpp
+        ${SS_SRC}/app/gui/stereo/*.cpp)
     list(APPEND SS_TOOL_SOURCES ${SS_GUI_SOURCES} ${SS_SRC}/app/FfmpegVideo.cpp)
     list(APPEND SS_TOOL_DEFS SS_TOOL_GUI=1)
     list(APPEND SS_TOOL_LIBS imgui_glfw OpenGL::GL)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        find_package(PkgConfig REQUIRED)
+        pkg_check_modules(STEREO_DECLARE REQUIRED IMPORTED_TARGET stereo-declare>=1.10)
+        pkg_check_modules(STEREO_WAYLAND REQUIRED IMPORTED_TARGET wayland-client xext)
+        pkg_get_variable(SS_WAYLAND_PROTOCOLS wayland-protocols pkgdatadir)
+        find_program(SS_WAYLAND_SCANNER wayland-scanner REQUIRED)
+        set(SS_VIEWPORT_XML "${SS_WAYLAND_PROTOCOLS}/stable/viewporter/viewporter.xml")
+        set(SS_VIEWPORT_HEADER "${CMAKE_BINARY_DIR}/app_generated/viewporter-client-protocol.h")
+        set(SS_VIEWPORT_CODE "${CMAKE_BINARY_DIR}/app_generated/viewporter-protocol.c")
+        add_custom_command(OUTPUT ${SS_VIEWPORT_HEADER} ${SS_VIEWPORT_CODE}
+            COMMAND ${SS_WAYLAND_SCANNER} client-header ${SS_VIEWPORT_XML} ${SS_VIEWPORT_HEADER}
+            COMMAND ${SS_WAYLAND_SCANNER} private-code ${SS_VIEWPORT_XML} ${SS_VIEWPORT_CODE}
+            DEPENDS ${SS_VIEWPORT_XML})
+        list(APPEND SS_TOOL_SOURCES ${SS_VIEWPORT_HEADER} ${SS_VIEWPORT_CODE})
+        list(APPEND SS_TOOL_LIBS PkgConfig::STEREO_DECLARE PkgConfig::STEREO_WAYLAND)
+    endif()
+
 
     # The desktop's own file picker (src/app/gui/NativeDialog.h). Windows and
     # macOS need the platform toolkit for it; Linux spawns zenity/kdialog and

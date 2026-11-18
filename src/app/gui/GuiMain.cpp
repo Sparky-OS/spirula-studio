@@ -15,6 +15,7 @@
 #include "app/gui/Layout.h"
 #include "app/gui/NavCamera.h"
 #include "app/gui/VulkanPrime.h"
+#include "app/gui/stereo/NativeViewport.h"
 #include "i18n/catalog/Brand.h"
 
 #ifdef _WIN32
@@ -176,6 +177,10 @@ int spirula_gui_main(int argc, char** argv) {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+#ifdef __linux__
+    glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_TRUE);
+    glfwWindowHint(GLFW_CONTEXT_CREATION_API, GLFW_EGL_CONTEXT_API);
+#endif
 #if !defined(_WIN32) && !defined(__APPLE__)
     glfwWindowHintString(GLFW_WAYLAND_APP_ID, gui::kDesktopAppId);
     glfwWindowHintString(GLFW_X11_CLASS_NAME, gui::kDesktopAppId);
@@ -214,6 +219,7 @@ int spirula_gui_main(int argc, char** argv) {
 #endif
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);   // vsync
+    gui::stereo::initialize(window);
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -298,7 +304,9 @@ int spirula_gui_main(int argc, char** argv) {
             const bool scripted = gui::automation::begin_frame();
             if (const auto d = gui::automation::take_drop(); !d.empty()) app.handle_drop(d);
             ImGui::NewFrame();
+            gui::stereo::begin_frame();
             app.frame();
+            gui::stereo::end_frame();
             const bool busy = ui_busy() || scripted || app.animating();
             ImGui::Render();
 
@@ -325,6 +333,7 @@ int spirula_gui_main(int argc, char** argv) {
         app.shutdown();
     }
 
+    gui::stereo::shutdown();
     gui::automation::shutdown();
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
