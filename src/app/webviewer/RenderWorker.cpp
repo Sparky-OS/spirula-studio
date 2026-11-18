@@ -3,8 +3,8 @@
 #include "app/webviewer/RenderWorker.h"
 
 #include "backend/api/BackendRuntime.h"
-#include "engine/Engine.h"
-#include "engine/EngineViewerGeometry.h"    // engine render + viewer entry points
+#include "engine/Engine.h"    // engine render + viewer entry points
+#include "engine/EngineViewerGeometry.h"
 #include "core/Camera.h"    // camera_model_from_name
 #include "app/DepthColor.h"  // error_scale -- shared with the error pane
 #include "data/FrustumSize.h"

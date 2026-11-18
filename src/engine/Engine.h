@@ -619,7 +619,6 @@ void engine_viewer_set_camera_size(float camera_size);
 // grid_dist / grid_target. No-op until engine_viewer_init has run.
 void engine_viewer_set_grid(float radius, float view_distance);
 
-
 // engine_blit_view: fused viewer-render annotation. Caches the BVH on the
 // first call that shows cameras or the overlay (rebuilt when camera_size
 // or the overlay changes); reads thumbnails out of the
