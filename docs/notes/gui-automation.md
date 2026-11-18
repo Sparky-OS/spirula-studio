@@ -183,10 +183,13 @@ reaches the tool, that the panel is laid out, that the picture is right.
 
 ## Atomic stereo trace
 
-With GUI automation armed, `SS_GUI_PAIR_CAPTURE` can name an existing writable directory for a bounded four-slot trace.
-Each engine pair writes centre RGB8, float32 ray depth and transmittance, and left-first RGB8 eyes under the same engine lock.
+With GUI automation armed, `SS_GUI_PAIR_CAPTURE` can name an existing writable directory for a bounded sixteen-slot trace.
+Each engine pair writes centre RGB8, the diagnostic blended centre-distance and transmittance, and left-first RGB8 eyes under the same engine lock.
 The JSON records request, training step, raster dimensions, centre camera and the applied compositor-derived camera offset.
+Three projection buffers preserve Gaussian identities, world centres and screen data for independent geometry checks.
+The centre-distance channel is alpha-composited and must not be deprojected as an opaque surface.
+A small monochrome request/step grid with CRC8 is identical in both eyes and identifies the buffer actually captured.
 The native viewport logs its placement so a compositor capture can be measured at the actual displayed size.
 The trace adds a centre render and host readback, so its timings are not performance measurements.
 Without both automation and the trace directory this path does no work.
-Use the completed native presentation's request id to select a trace; a completed worker result alone may still be waiting for presentation.
+Decode the witness from both captured eyes to select a trace; an upload log can precede compositor presentation.

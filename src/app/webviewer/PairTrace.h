@@ -21,6 +21,28 @@ inline void trace_bytes(const std::string& path, const void* data, size_t size) 
     if (!written || !closed) throw std::runtime_error("viewer trace: cannot write " + path);
 }
 
+inline void mark_pair_trace(std::vector<uint8_t>& pair, uint64_t request, int step, int width, int height) {
+    if (width<128 || height<128 || request>0xffffff || step>0xfffffe)
+        throw std::runtime_error("viewer trace: witness exceeds its raster or counter range");
+    uint8_t bytes[9] = {0xd3,0x7a};
+    for (int i=0;i<3;++i) {
+        bytes[2+i] = (uint8_t)(request>>(8*i));
+        bytes[5+i] = (uint8_t)((uint32_t)step>>(8*i));
+    }
+    uint8_t crc = 0;
+    for (int i=0;i<8;++i) {
+        crc ^= bytes[i];
+        for (int bit=0;bit<8;++bit) crc = (uint8_t)((crc<<1)^((crc&0x80) ? 7 : 0));
+    }
+    bytes[8] = crc;
+    for (int bit=0;bit<72;++bit) {
+        const uint8_t value = (bytes[bit/8]>>(bit%8))&1 ? 255 : 0;
+        const int x0 = 8+(bit%9)*12, y0 = 8+(bit/9)*12;
+        for (int eye=0;eye<2;++eye) for (int y=y0;y<y0+12;++y) for (int x=x0;x<x0+12;++x)
+            for (int c=0;c<3;++c) pair[((size_t)y*2*width+eye*width+x)*3+c] = value;
+    }
+}
+
 inline void write_pair_trace(const char* directory, uint64_t id, int step, int width, int height,
                              double convergence, double scale, double focal, double cx, double cy,
                              double offset, const float* view, const std::vector<float>& depth,
@@ -29,7 +51,7 @@ inline void write_pair_trace(const char* directory, uint64_t id, int step, int w
                              const std::vector<float>& centre_projection,
                              const std::vector<float>& left_projection,
                              const std::vector<float>& right_projection) {
-    const std::string base = std::string(directory) + "/pair-" + std::to_string(id%4);
+    const std::string base = std::string(directory) + "/pair-" + std::to_string(id%16);
     trace_bytes(base+".depth",depth.data(),depth.size()*sizeof(float));
     trace_bytes(base+".transmittance",transmittance.data(),transmittance.size()*sizeof(float));
     trace_bytes(base+".centre",centre.data(),centre.size());

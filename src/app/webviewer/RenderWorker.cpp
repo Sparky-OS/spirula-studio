@@ -340,6 +340,7 @@ struct RenderWorker::Impl {
                     const auto right_projection = trace && *trace ? engine_viewer_projection() : EngineViewerProjection{};
                     pack_pair(left_pixels,right_pixels,res);
                     if (trace && *trace) {
+                        spirula::stereo::mark_pair_trace(res.rgb8,res.id,res.step,res.W,res.H);
                         float view[16]; engine_viewmat(centre.c2w,view);
                         spirula::stereo::write_pair_trace(trace,res.id,res.step,res.W,res.H,
                             p.stereo->convergence,cfg.train_frame_scale*cfg.relative_scale.value_or(1.f),
