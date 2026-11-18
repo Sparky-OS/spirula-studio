@@ -29,6 +29,11 @@ project(spirula_studio LANGUAGES C CXX)  # CUDA enabled by the cuda backend modu
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 include(SsOptions)
+
+option(SS_STEREO_DEPTH_STUDY_VISIBLE "Test build: fit visible contribution depth percentiles" OFF)
+if(SS_STEREO_DEPTH_STUDY_VISIBLE AND (NOT SS_BUILD_BACKEND_TESTS OR NOT SS_BUILD_GUI))
+    message(FATAL_ERROR "The depth study requires GUI and backend test builds; it is not a package option")
+endif()
 include(SsSources)
 
 # A leaf everything else may link: the backends print device names, and their
@@ -75,11 +80,7 @@ include(SsChecks)
 
 message(STATUS "spirula_studio configured (backend: ${SS_BACKEND}).")
 
-option(SS_STEREO_DEPTH_STUDY_VISIBLE "Test build: fit the visible contribution 1st–99th depth percentiles" OFF)
 if(SS_STEREO_DEPTH_STUDY_VISIBLE)
-    if(NOT SS_BUILD_BACKEND_TESTS OR NOT SS_BUILD_GUI)
-        message(FATAL_ERROR "The depth study requires GUI and backend test builds; it is not a package option")
-    endif()
     set_source_files_properties(${SS_SRC}/app/webviewer/RenderWorker.cpp PROPERTIES
         COMPILE_DEFINITIONS SS_STEREO_DEPTH_STUDY_VISIBLE=1)
     set_target_properties(spirula PROPERTIES OUTPUT_NAME spirula-depth-study)
