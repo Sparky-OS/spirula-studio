@@ -618,12 +618,6 @@ void engine_viewer_set_camera_size(float camera_size);
 // Per-render zoom / recenter updates arrive via engine_blit_view's
 // grid_dist / grid_target. No-op until engine_viewer_init has run.
 void engine_viewer_set_grid(float radius, float view_distance);
-struct EngineViewerGeometry {
-    std::vector<float> capsules;  // endpoint xyzr pairs
-    std::vector<float> triangles; // three xyz vertices
-};
-EngineViewerGeometry engine_viewer_geometry(float camera_size, bool cameras, bool grid,
-                                             float distance, const float target[3]);
 
 
 // engine_blit_view: fused viewer-render annotation. Caches the BVH on the
