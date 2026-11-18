@@ -9,7 +9,7 @@
 #include <X11/Xutil.h>
 #include <stereo-declare.h>
 #include <wayland-client.h>
-#include "viewporter-client-protocol.h"
+#include "app_generated/viewporter-client-protocol.h"
 #include <sys/mman.h>
 #include <sys/syscall.h>
 #include <unistd.h>
