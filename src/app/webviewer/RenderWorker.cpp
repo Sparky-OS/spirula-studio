@@ -176,6 +176,7 @@ struct RenderWorker::Impl {
         const double top = q.cy/q.fy, bottom = (q.H-q.cy)/q.fy;
         SceneSupport support;
         ParallaxRange projected{1/request.convergence,0,false};
+        const bool ray_traced = (q.primitive.empty() ? cfg.primitive : q.primitive) == "3dgut";
         int64_t first_unbounded = -1;
         double bad_z = 0, bad_radius = 0;
         for (int64_t i = 0; i < engine_get_cur_num_splats(); ++i) {
@@ -186,8 +187,8 @@ struct RenderWorker::Impl {
             for (int r = 0; r < 3; ++r)
                 p[r] = view[4*r]*means[3*i]+view[4*r+1]*means[3*i+1]+view[4*r+2]*means[3*i+2]+view[4*r+3];
             const double radius = std::exp(std::max({scales[3*i],scales[3*i+1],scales[3*i+2]}))*std::sqrt(2*std::log(255*alpha));
-            if (q.model == "PINHOLE") {
-                if (!(p[2] > 0 && std::isfinite(radius))) continue;
+            if (!(p[2] > 0 && std::isfinite(radius))) continue;
+            if (q.model == "PINHOLE" && !ray_traced) {
                 const double centre_x = q.fx*p[0]/p[2]+q.cx, centre_y = q.fy*p[1]/p[2]+q.cy;
                 const double shift = q.fx*sweep*(1/p[2]+1/convergence);
                 const double extent_x = q.fx*radius*(1/p[2]+(std::abs(p[0])+sweep)/(p[2]*p[2]));
@@ -260,7 +261,6 @@ struct RenderWorker::Impl {
             }
         }
         auto range = support.range(); range.z_min /= scale; range.z_max /= scale;
-        const bool ray_traced = (q.primitive.empty() ? cfg.primitive : q.primitive) == "3dgut";
         const auto pair = q.model == "PINHOLE" && !ray_traced
             ? fit_camera_pair(request.limits,projected,request.convergence,q.fx,q.W,false)
             : camera_pair(request.limits,range,request.convergence,q.fx,q.W,ortho);
