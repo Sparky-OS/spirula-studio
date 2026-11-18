@@ -268,8 +268,19 @@ struct RenderWorker::Impl {
             }
         }
         auto range = support.range(); range.z_min /= scale; range.z_max /= scale;
+        std::function<SceneProjection()> projection;
+        if (q.model == "PINHOLE" && !ray_traced && (q.primitive.empty() ? cfg.primitive : q.primitive) == "3dgs")
+            projection = [&] {
+                ViewResult centre;
+                render_once(q,centre);
+                SceneProjection snapshot;
+                snapshot.rows = engine_viewer_projection().rows;
+                std::copy(view,view+12,snapshot.view.begin());
+                snapshot.scale = scale; snapshot.width = q.W; snapshot.height = q.H;
+                return snapshot;
+            };
         auto pair = q.model == "PINHOLE" && !ray_traced
-            ? fit_camera_pair(request.limits,projected,request.convergence,q.fx,q.W,false,request.envelope)
+            ? fit_camera_pair(request.limits,projected,request.convergence,q.fx,q.W,false,request.envelope,projection)
             : camera_pair(request.limits,range,request.convergence,q.fx,q.W,ortho,request.envelope);
 #ifdef SS_STEREO_DEPTH_STUDY_VISIBLE
         if (q.model!="PINHOLE" || ray_traced || (q.primitive.empty() ? cfg.primitive : q.primitive)!="3dgs")

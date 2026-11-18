@@ -3,6 +3,9 @@
 #include <algorithm>
 #include <cmath>
 #include <optional>
+#include <array>
+#include <functional>
+#include <vector>
 
 namespace spirula::stereo {
 
@@ -23,11 +26,19 @@ inline ParallaxRange projected_gaussian_range(double z, double radius, double co
     return {std::max(0.,1/convergence-1/z+spread),std::max(0.,1/z-1/convergence+spread),true};
 }
 
+struct SceneProjection {
+    std::vector<float> rows;
+    std::array<float,12> view;
+    double scale;
+    int width, height;
+};
+
 struct FitScene {
     ParallaxRange support;
     double convergence, focal;
     int width;
     bool orthographic;
+    std::function<SceneProjection()> projection;
 };
 
 inline double camera_offset(DepthLimits limits, const FitScene& scene) {
@@ -46,7 +57,8 @@ inline double camera_offset(DepthLimits limits, const FitScene& scene) {
 
 inline CameraPair fit_camera_pair(std::optional<DepthLimits> limits, ParallaxRange support,
                                    double convergence, double focal, int width, bool orthographic,
-                                   std::optional<ParallaxRange> envelope = {}) {
+                                   std::optional<ParallaxRange> envelope = {},
+                                   std::function<SceneProjection()> projection = {}) {
     CameraPair pair;
     pair.support = support;
     if (envelope) {
@@ -68,7 +80,7 @@ inline CameraPair fit_camera_pair(std::optional<DepthLimits> limits, ParallaxRan
           support.sunk >= 0 && support.popped >= 0)) {
         pair.state = CameraPair::State::NoSupport; return pair;
     }
-    const double offset = camera_offset(*limits,{support,convergence,focal,width,orthographic});
+    const double offset = camera_offset(*limits,{support,convergence,focal,width,orthographic,std::move(projection)});
     if (orthographic) {
         pair.left.shear = -offset / convergence;
         pair.right.shear = -pair.left.shear;
