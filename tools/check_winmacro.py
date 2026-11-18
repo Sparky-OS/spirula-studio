@@ -20,7 +20,7 @@ EXTS = {".h", ".hh", ".hpp", ".hxx", ".inl", ".c", ".cc", ".cpp", ".cxx",
         ".cu", ".cuh", ".slang", ".m", ".mm"}
 NO_WINDOWS_H = {".slang", ".m", ".mm"}   # slangc, or macOS only
 # Vendored, or output. Root `build*` trees and every dot-directory go too.
-EXCLUDED = {"outputs", "src/external", "viewer/build"}
+EXCLUDED = {"outputs", "src/external", "viewer/build", "glfw", "imgui", "slang"}
 
 # Every branch opens on a literal, so the engine skips straight to [/"'#].
 TOKEN = re.compile(r"""
