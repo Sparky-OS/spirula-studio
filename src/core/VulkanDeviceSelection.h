@@ -22,6 +22,8 @@
 #include <vector>
 
 #include <climits>
+#include <cstdio>
+#include "core/InstalledModels.h"
 #include "core/Env.h"
 #include "core/VulkanMemoryBudget.h"
 
@@ -41,6 +43,7 @@ struct DeviceRecord {
     std::string                unusable_reason;
     VkPhysicalDeviceProperties props{};
     uint8_t                    uuid[VK_UUID_SIZE] = {};
+    std::string                pci_id;
 };
 
 inline const char* deviceTypeName(VkPhysicalDeviceType t) {
@@ -111,13 +114,28 @@ inline void probeIdentity(VkPhysicalDevice pd, DeviceRecord* r) {
         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES};
     VkPhysicalDeviceProperties2 p2{
         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+    VkPhysicalDevicePCIBusInfoPropertiesEXT pci{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PCI_BUS_INFO_PROPERTIES_EXT};
+    id.pNext = &pci;
     p2.pNext = &id;
     vkGetPhysicalDeviceProperties2(pd, &p2);
+    char bus[32];
+    std::snprintf(bus,sizeof bus,"pci-%04x:%02x:%02x.%x",pci.pciDomain,pci.pciBus,pci.pciDevice,pci.pciFunction);
+    r->pci_id = bus;
     r->props = p2.properties;
     r->name = p2.properties.deviceName;
     r->type = deviceTypeName(p2.properties.deviceType);
     std::copy(id.deviceUUID, id.deviceUUID + VK_UUID_SIZE, r->uuid);
     r->others_bytes = othersAtFirstProbe(pd, id);
+}
+
+inline bool graphics_allowed(const DeviceRecord& device) {
+#ifdef SS_EDITION_PACKAGE
+    const char* pci = std::getenv("SS_EDITION_GPU_PCI");
+    return pci && device.pci_id == pci;
+#else
+    (void)device;
+    return true;
+#endif
 }
 
 // What the caller asked for. `text` is the raw value; `error` explains a
@@ -278,7 +296,9 @@ inline int autoPick(const std::vector<DeviceRecord>& devices) {
     return best;
 }
 
-inline Resolution resolveRequest(const Request& r,
+inline Resolution resolveRequest(const Request&, const std::vector<DeviceRecord>&);
+
+inline Resolution resolveRequestImpl(const Request& r,
                                  const std::vector<DeviceRecord>& devices) {
     Resolution out;
     auto fail = [&](ResolveStatus s, const std::string& why) {
@@ -380,6 +400,22 @@ inline Resolution resolveRequest(const Request& r,
     out.device = d;
     out.selector = uuidSelector(d.uuid);
     return out;
+}
+
+inline Resolution resolveRequest(const Request& request, const std::vector<DeviceRecord>& devices) {
+#ifdef SS_EDITION_PACKAGE
+    const char* pci = std::getenv("SS_EDITION_GPU_PCI");
+    if (pci && *pci) {
+        for (const auto& device : devices)
+            if (device.pci_id == pci) return resolveRequestImpl(parseRequest(selectorFor(device)),devices);
+    }
+    Resolution out;
+    out.status = ResolveStatus::Missing;
+    out.error = spirula::installed_models::graphics_message();
+    return out;
+#else
+    return resolveRequestImpl(request,devices);
+#endif
 }
 
 inline Resolution resolveSelector(const std::string& value,

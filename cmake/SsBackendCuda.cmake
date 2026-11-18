@@ -92,12 +92,13 @@ if(APPLE AND CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
 endif()
 
 # nvcc flags
+set(SS_CUDA_COMPILER_THREADS "0" CACHE STRING "CUDA compiler worker threads")
 set(SPLAT_NVCC_FLAGS
     "-O3" "--use_fast_math"
     "--expt-relaxed-constexpr"
     "-Xcudafe=--diag_suppress=20012"
     "-Xcudafe=--diag_suppress=550"
-    "--threads" "0"
+    "--threads" "${SS_CUDA_COMPILER_THREADS}"
     "-Xptxas" "--warn-on-double-precision-use"
 )
 

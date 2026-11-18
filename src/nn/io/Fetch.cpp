@@ -1,4 +1,5 @@
 #include "nn/io/Fetch.h"
+#include "core/InstalledModels.h"
 
 #include "core/Env.h"
 #include "core/ModelMirror.h"
@@ -60,11 +61,15 @@ bool have_curl() {
 }  // namespace
 
 std::string model_cache_dir() {
+    #ifdef SS_EDITION_PACKAGE
+    return spirula::installed_models::root();
+#else
     return (cache_root() / "models").string();
+#endif
 }
 
 std::string cached_path(const FetchFile& f) {
-    return (cache_root() / "models" / f.file).string();
+    return (fs::path(model_cache_dir()) / f.file).string();
 }
 
 std::string mirror_url(const FetchFile& f) {
@@ -99,6 +104,10 @@ void require_licenses(const char* families) {
 }
 
 std::string ensure_file(const FetchFile& f, const char* tag) {
+#ifdef SS_EDITION_PACKAGE
+    (void)tag;
+    return spirula::installed_models::require(f.file);
+#else
     const fs::path dst = cached_path(f);
     std::error_code ec;
 
@@ -176,6 +185,7 @@ std::string ensure_file(const FetchFile& f, const char* tag) {
     NN_CHECK(!ec, "cannot move the download into place: %s", ec.message().c_str());
     NN_LOG_INFO("[%s] saved %s\n", tag, dst.string().c_str());
     return dst.string();
+#endif
 }
 
 }  // namespace nn

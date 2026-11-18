@@ -332,7 +332,7 @@ const Enumeration& enumeration() {
             d.index = (int)i;
             sel::probeIdentity(devices[i], &d);
             d.vram_bytes = (uint64_t)device_local_vram(devices[i]);
-            d.usable = p.required_ok;
+            d.usable = p.required_ok && sel::graphics_allowed(d);
             if (!p.required_ok) d.unusable_reason = p.unusable;
             out.devices.push_back(std::move(d));
             out.issues.push_back(device_issue(p));
@@ -443,7 +443,7 @@ void Context::init() {
         d.index = (int)i;
         sel::probeIdentity(devices[i], &d);
         d.vram_bytes = (uint64_t)device_local_vram(devices[i]);
-        d.usable = pr.required_ok;
+        d.usable = pr.required_ok && sel::graphics_allowed(d);
         if (!pr.required_ok) d.unusable_reason = pr.unusable;
         here.push_back(std::move(d));
     }

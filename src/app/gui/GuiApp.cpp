@@ -5954,6 +5954,10 @@ void GuiApp::load_native_devices() {
 }
 
 void GuiApp::draw_device_picker(bool as_menu) {
+#ifdef SS_EDITION_PACKAGE
+    (void)as_menu;
+    return;
+#endif
     load_native_devices();
 
     const bool frozen = _native_device_frozen;

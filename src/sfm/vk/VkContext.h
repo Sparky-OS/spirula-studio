@@ -1018,7 +1018,7 @@ private:
             else if (!compute)
                 r.unusable_reason = "no compute queue";
             else
-                r.usable = true;
+                r.usable = spirula::vkselect::graphics_allowed(r);
             list.push_back(std::move(r));
         }
 

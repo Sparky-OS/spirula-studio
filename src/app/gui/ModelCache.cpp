@@ -1,6 +1,7 @@
 // ModelCache.cpp -- see ModelCache.h.
 
 #include "app/gui/ModelCache.h"
+#include "core/InstalledModels.h"
 #include "i18n/catalog/Log.h"
 
 #include "app/AppPaths.h"
@@ -58,7 +59,11 @@ const ExtraFile kBertVocab{
     231508ull};
 
 std::string cache_file(const char* name) {
+    #ifdef SS_EDITION_PACKAGE
+    return spirula::installed_models::path(name);
+#else
     return (fs::path(app::cache_dir()) / "models" / name).string();
+#endif
 }
 
 }  // namespace
@@ -156,7 +161,7 @@ bool accept_license(const std::string& family) {
 }
 
 std::string model_path(const ModelEntry& e) {
-    return (fs::path(app::cache_dir()) / "models" / e.file).string();
+    return cache_file(e.file);
 }
 
 std::string detector_path(const TextDetector& d) { return cache_file(d.weights->file); }
@@ -210,10 +215,15 @@ MaskModelFiles cached_mask_model(const std::string& id, const std::string& detec
 }
 
 bool file_is_cached(const std::string& path, uint64_t bytes) {
+#ifdef SS_EDITION_PACKAGE
+    (void)bytes;
+    return spirula::installed_models::verified(spirula::installed_models::name_of(path));
+#else
     std::error_code ec;
     if (!fs::is_regular_file(path, ec)) return false;
     // The catalog sizes are approximate, so this is a floor, not an equality.
     return fs::file_size(path, ec) > bytes / 2;
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -248,6 +258,14 @@ const ProgressClock& FileDownload::clock() {
 }
 
 void FileDownload::start(const PendingDownload& d) {
+#ifdef SS_EDITION_PACKAGE
+    std::lock_guard<std::mutex> lock(_mu);
+    _status = spirula::installed_models::message(d.dest);
+    _path.clear();
+    _state = State::Failed;
+    open_url(spirula::installed_models::installation_url(d.dest));
+    return;
+#else
     if (_state.load() == State::Running) return;
     if (_worker.joinable()) _worker.join();
     if (const auto missing = spirula::license::missing(d.license_family); !missing.empty()) {
@@ -274,6 +292,7 @@ void FileDownload::start(const PendingDownload& d) {
     std::vector<std::string> urls{d.url};
     if (!d.mirror.empty()) urls.push_back(d.mirror);
     _worker = std::thread([this, urls, d] { run(urls, d.dest, d.bytes, d.sha256); });
+#endif
 }
 
 void FileDownload::run_command(std::vector<std::string> argv) {

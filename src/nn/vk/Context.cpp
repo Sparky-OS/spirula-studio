@@ -113,7 +113,7 @@ sel::DeviceRecord probeRecord(VkPhysicalDevice pd, int index) {
     vkGetPhysicalDeviceQueueFamilyProperties(pd, &nq, qf.data());
     for (auto& q : qf)
         if (q.queueFlags & VK_QUEUE_COMPUTE_BIT) {
-            out.usable = true;
+            out.usable = sel::graphics_allowed(out);
             return out;
         }
     out.unusable_reason = "no compute queue";

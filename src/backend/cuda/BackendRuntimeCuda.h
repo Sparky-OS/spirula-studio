@@ -1,4 +1,6 @@
 #pragma once
+#include <cstdlib>
+#include <cstring>
 // Inline cudart implementation of the backend runtime (the default backend).
 // Included by BackendRuntime.h — do not include directly. Calls are
 // unchecked, matching the raw cuda* call sites this layer replaced.
@@ -69,10 +71,19 @@ inline DeviceInfo device_info(int index) {
     std::snprintf(info.name, sizeof(info.name), "%s", prop.name);
     info.type = prop.integrated ? "integrated" : "discrete";
     info.vram_bytes = (uint64_t)prop.totalGlobalMem;
+    info.uuid = "uuid:";
+    const char* hex = "0123456789abcdef";
+    for (unsigned char byte : prop.uuid.bytes) { info.uuid += hex[byte >> 4]; info.uuid += hex[byte & 15]; }
     info.usable = true;
     return info;
 }
 inline bool device_select(int index) {
+#ifdef SS_EDITION_PACKAGE
+    const char* pci = std::getenv("SS_EDITION_GPU_PCI");
+    if (!pci || std::strncmp(pci,"pci-",4) || cudaDeviceGetByPCIBusId(&index,pci+4) != cudaSuccess) {
+        cudaGetLastError(); return false;
+    }
+#endif
     if (index < 0 || index >= device_count()) return false;
     if (cudaSetDevice(index) != cudaSuccess) {
         cudaGetLastError();

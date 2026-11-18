@@ -1,4 +1,6 @@
 #include "marigold/model/Remote.h"
+#include "core/InstalledModels.h"
+#include <fstream>
 
 #include "core/Env.h"
 #include "marigold/Common.h"
@@ -64,6 +66,26 @@ RemoteRange::~RemoteRange() {
 }
 
 void RemoteRange::fetch() {
+#ifdef SS_EDITION_PACKAGE
+    try {
+        const auto path = spirula::installed_models::require(std::string("marigold-source/") + f_.name);
+        std::ifstream input(path,std::ios::binary);
+        input.seekg((std::streamoff)pos_);
+        uint64_t at = pos_;
+        while (at < end_ && !stop_) {
+            std::vector<uint8_t> chunk((size_t)std::min<uint64_t>(kChunk,end_-at));
+            input.read((char*)chunk.data(),(std::streamsize)chunk.size());
+            if ((size_t)input.gcount() != chunk.size())
+                throw std::runtime_error(spirula::installed_models::message(f_.name));
+            at += chunk.size();
+            std::unique_lock<std::mutex> lock(mu_);
+            cv_.wait(lock,[&] { return stop_ || buffered_ < kAhead; });
+            buffered_ += chunk.size(); chunks_.push_back(std::move(chunk)); cv_.notify_all();
+        }
+    } catch (...) { std::lock_guard<std::mutex> lock(mu_); error_ = std::current_exception(); }
+    { std::lock_guard<std::mutex> lock(mu_); done_ = true; }
+    cv_.notify_all();
+#else
     uint64_t at = pos_;
     int host = 0, attempts = 0;
     std::string why;
@@ -115,6 +137,7 @@ void RemoteRange::fetch() {
     std::lock_guard<std::mutex> lk(mu_);
     done_ = true;
     cv_.notify_all();
+#endif
 }
 
 void RemoteRange::read(void* dst, size_t n) {
