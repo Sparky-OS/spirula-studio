@@ -2006,7 +2006,11 @@ void ViewportPanel::draw_preview(const ImVec2& avail) {
         return;
     }
     const bool stereo_on = stereo::settings().enabled;
-    const ImVec2 size = stereo_on ? avail : ImVec2((float)W,(float)H);
+    ImVec2 size = stereo_on ? avail : ImVec2((float)W,(float)H);
+    if (stereo_on && W*avail.y > H*avail.x + W) {
+        size.y = avail.x*H/W;
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY()+(avail.y-size.y)*0.5f);
+    }
     ImGui::Image((ImTextureID)(intptr_t)tex,size,
                  ImVec2(0,stereo_on ? 0 : 1),ImVec2(1,stereo_on ? 1 : 0));
     if (stereo_on) present_stereo();
