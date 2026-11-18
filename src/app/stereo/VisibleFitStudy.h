@@ -13,6 +13,7 @@ namespace spirula::stereo::study {
 struct Contributions {
     std::vector<double> weight;
     std::vector<int> peak_pixel;
+    std::vector<float> peak_weight;
     std::vector<float> transmission;
 };
 
@@ -25,11 +26,12 @@ Contributions raster(const std::vector<float>& rows, const std::vector<double>& 
     Contributions result;
     result.weight.assign(count,0);
     result.peak_pixel.assign(count,-1);
+    result.peak_weight.assign(count,0);
     result.transmission.assign((size_t)width*height,1);
     std::vector<uint8_t> done(result.transmission.size(),0);
     std::vector<size_t> order(count);
     std::iota(order.begin(),order.end(),0);
-    std::stable_sort(order.begin(),order.end(),[&](size_t a,size_t b) { return z[a]<z[b]; });
+    std::stable_sort(order.begin(),order.end(),[&](size_t a,size_t b) { return (std::isfinite(z[a]) ? z[a] : INFINITY)<(std::isfinite(z[b]) ? z[b] : INFINITY); });
     for (size_t i:order) {
         const float* row = rows.data()+14*i;
         const double a=row[6], b=row[7], c=row[8], opacity=row[9];
@@ -38,6 +40,7 @@ Contributions raster(const std::vector<float>& rows, const std::vector<double>& 
         const double sigma=2*std::log(255*opacity);
         const double rx=std::sqrt(sigma*c/determinant), ry=std::sqrt(sigma*a/determinant);
         if (!(std::isfinite(rx) && std::isfinite(ry) && std::isfinite(row[4]) && std::isfinite(row[5]))) continue;
+        if (row[4]+rx<-.5 || row[4]-rx>width+.5 || row[5]+ry<-.5 || row[5]-ry>height+.5) continue;
         const int x0=(int)std::max(0.,std::floor(row[4]-rx-.5)-1);
         const int x1=(int)std::min((double)width-1,std::ceil(row[4]+rx-.5)+1);
         const int y0=(int)std::max(0.,std::floor(row[5]-ry-.5)-1);
@@ -56,7 +59,7 @@ Contributions raster(const std::vector<float>& rows, const std::vector<double>& 
             if (after<=1e-4f) { done[pixel]=1; continue; }
             const float weight=before*alpha;
             result.weight[i]+=weight;
-            if (weight>peak) { peak=weight;result.peak_pixel[i]=(int)pixel; }
+            if (weight>peak) { peak=weight;result.peak_pixel[i]=(int)pixel;result.peak_weight[i]=weight; }
             result.transmission[pixel]=after;
             visit(i,pixel,weight);
         }
@@ -67,7 +70,7 @@ Contributions raster(const std::vector<float>& rows, const std::vector<double>& 
 inline double quantile(const std::vector<double>& depths,const std::vector<double>& weights,double p) {
     std::vector<size_t> order(depths.size());
     std::iota(order.begin(),order.end(),0);
-    std::stable_sort(order.begin(),order.end(),[&](size_t a,size_t b) { return depths[a]<depths[b]; });
+    std::stable_sort(order.begin(),order.end(),[&](size_t a,size_t b) { return (std::isfinite(depths[a]) ? depths[a] : INFINITY)<(std::isfinite(depths[b]) ? depths[b] : INFINITY); });
     const double total=std::accumulate(weights.begin(),weights.end(),0.);
     if (!(total>0)) throw std::runtime_error("depth study: no visible contribution");
     double sum=0;
