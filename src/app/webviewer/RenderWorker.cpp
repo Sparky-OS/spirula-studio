@@ -174,6 +174,7 @@ struct RenderWorker::Impl {
         const double left = (q.cx + principal)/q.fx, right = (q.W-q.cx+principal)/q.fx;
         const double top = q.cy/q.fy, bottom = (q.H-q.cy)/q.fy;
         SceneSupport support;
+        ParallaxRange projected{1/request.convergence,0,false};
         int64_t first_unbounded = -1;
         double bad_z = 0, bad_radius = 0;
         for (int64_t i = 0; i < engine_get_cur_num_splats(); ++i) {
@@ -184,6 +185,20 @@ struct RenderWorker::Impl {
             for (int r = 0; r < 3; ++r)
                 p[r] = view[4*r]*means[3*i]+view[4*r+1]*means[3*i+1]+view[4*r+2]*means[3*i+2]+view[4*r+3];
             const double radius = std::exp(std::max({scales[3*i],scales[3*i+1],scales[3*i+2]}))*std::sqrt(2*std::log(255*alpha));
+            if (q.model == "PINHOLE") {
+                if (!(p[2] > 0 && std::isfinite(radius))) continue;
+                const double centre_x = q.fx*p[0]/p[2]+q.cx, centre_y = q.fy*p[1]/p[2]+q.cy;
+                const double shift = q.fx*sweep*(1/p[2]+1/convergence);
+                const double extent_x = q.fx*radius*(1/p[2]+(std::abs(p[0])+sweep)/(p[2]*p[2]));
+                const double extent_y = q.fy*radius*(1/p[2]+std::abs(p[1])/(p[2]*p[2]));
+                if (centre_x+shift+extent_x < 0 || centre_x-shift-extent_x > q.W ||
+                    centre_y+extent_y < 0 || centre_y-extent_y > q.H) continue;
+                const double z = p[2]/scale, reach = radius/scale;
+                const double spread = reach/(z*z);
+                projected.sunk = std::max(projected.sunk,1/request.convergence-1/z+spread);
+                projected.popped = std::max(projected.popped,1/z-1/request.convergence+spread);
+                projected.valid = true;
+            }
             if (q.model == "ORTHOGRAPHIC") {
                 support.z_min = std::min(support.z_min,p[2]-radius);
                 support.z_max = std::max(support.z_max,p[2]+radius);
@@ -191,10 +206,12 @@ struct RenderWorker::Impl {
             if (support.z_min <= 0 && first_unbounded < 0) { first_unbounded=i;bad_z=p[2];bad_radius=radius; }
         }
         auto range = support.range(); range.z_min /= scale; range.z_max /= scale;
-        const auto pair = camera_pair(request.limits,range,request.convergence,q.fx,q.W,q.model=="ORTHOGRAPHIC");
+        const auto pair = q.model == "PINHOLE"
+            ? fit_camera_pair(request.limits,projected,request.convergence,q.fx,q.W,false)
+            : camera_pair(request.limits,range,request.convergence,q.fx,q.W,true);
         if (spirula::env_on("GUI_AUTOMATION"))
-            std::fprintf(stderr,"[stereo-camera] W=%d H=%d fx=%.9g C=%.9g scale=%.9g z_min=%.9g z_max=%.9g offset=%.9g principal=%.9g shear=%.9g state=%d unbounded=%lld bad_z=%.9g radius=%.9g\n",
-                         q.W,q.H,q.fx,request.convergence,scale,range.z_min,range.z_max,pair.right.offset,pair.right.principal,pair.right.shear,(int)pair.state,(long long)first_unbounded,bad_z,bad_radius);
+            std::fprintf(stderr,"[stereo-camera] W=%d H=%d fx=%.9g C=%.9g scale=%.9g z_min=%.9g z_max=%.9g offset=%.9g principal=%.9g shear=%.9g state=%d sunk_coefficient=%.9g popped_coefficient=%.9g unbounded=%lld bad_z=%.9g radius=%.9g\n",
+                         q.W,q.H,q.fx,request.convergence,scale,range.z_min,range.z_max,pair.right.offset,pair.right.principal,pair.right.shear,(int)pair.state,projected.sunk,projected.popped,(long long)first_unbounded,bad_z,bad_radius);
         return pair;
     }
 

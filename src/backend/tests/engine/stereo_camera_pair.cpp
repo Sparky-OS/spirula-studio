@@ -42,6 +42,21 @@ int main(int argc, char**) {
                 if (pair.state == CameraPair::State::Ready) throw std::runtime_error("missing flat explanation");
             }
         }
+        const DepthLimits limits{10,4};
+        const double focal = 1000, convergence = 3, z = 1, radius = 2;
+        const ParallaxRange gaussian{1/convergence-1/z+radius/(z*z),1/z-1/convergence+radius/(z*z),true};
+        const auto fitted = fit_camera_pair(limits,gaussian,convergence,focal,1200,false);
+        if (!(fitted.right.offset > 0)) throw std::runtime_error("finite projected Gaussian was flattened");
+        for (double dz : {-radius,radius}) {
+            double pixels[2]; int i = 0;
+            for (auto eye : {fitted.left,fitted.right}) {
+                const double x = .2-eye.offset;
+                pixels[i++] = focal*x/z+eye.principal-focal*x*dz/(z*z);
+            }
+            const double disparity = pixels[1]-pixels[0];
+            if (disparity < -limits.popped*1200/1920.-1e-9 || disparity > limits.sunk*1200/1920.+1e-9)
+                throw std::runtime_error("projected Gaussian support exceeds the limits");
+        }
     } catch (const std::exception& e) {
         std::fprintf(stderr,"stereo_camera_pair: %s\n",e.what());return 1;
     }
