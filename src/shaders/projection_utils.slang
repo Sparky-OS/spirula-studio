@@ -5,6 +5,8 @@
 
 #define _PROJECTION_UTILS_SLANG_INC
 
+#include "camera_transform.slang"
+
 
 static const float ALPHA_THRESHOLD = 1.0f/255.0f;
 
@@ -842,13 +844,15 @@ _DEF_DIST_ENTRIES(_prism, DistThinPrism, 8)
 [CudaDeviceExport]
 [Differentiable]
 float3 transform_ray_o(float3x3 R, float3 t) {
-    return -mul(t, R);
+    if (camera_transform_is_rigid(detach<float3x3>(R))) return -mul(t, R);
+    return -mul(camera_transform_inverse(R),t);
 }
 
 [CudaDeviceExport]
 [Differentiable]
 float3 transform_ray_d(float3x3 R, float3 raydir) {
-    return mul(raydir, R);
+    if (camera_transform_is_rigid(detach<float3x3>(R))) return mul(raydir, R);
+    return mul(camera_transform_inverse(R),raydir);
 }
 
 [CudaDeviceExport]

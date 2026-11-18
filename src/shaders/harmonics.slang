@@ -1,3 +1,5 @@
+#include "camera_transform.slang"
+
 // Based on https://github.com/nerfstudio-project/gsplat/blob/main/gsplat/cuda/csrc/SphericalHarmonicsCUDA.cu
 
 /*
@@ -146,7 +148,7 @@ float3 _sh_load_q16(uint16_t* packed, float2* bounds, int64_t base, int j, int64
 float3 mean_viewmat_to_unnormalized_viewdir(float3 mean, float3x3 R, float3 t) {
     // float3 campos = -mul(transpose(R), t);
     // return mean - campos;
-    return mean + mul(transpose(R), t);
+    return mean + mul(camera_transform_inverse(R), t);
 }
 
 

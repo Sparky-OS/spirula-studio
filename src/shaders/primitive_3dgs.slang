@@ -583,8 +583,8 @@ void projection_3dgs<
     //     float3(covar2d_inv[0][0], covar2d_inv[0][1], covar2d_inv[1][1]);
     conic = float3(covar2d_inv[0][0], covar2d_inv[0][1], covar2d_inv[1][1]);
 
-    float3 campos = -mul(transpose(detach<float3x3>(R)), detach<float3>(t));
-    radius = view_radius_3dgs(mean, scale, in_opacity, campos);
+    float3 campos = -mul(camera_transform_inverse(detach<float3x3>(R)), detach<float3>(t));
+    radius = detach<float>(view_radius_3dgs(mean, scale, in_opacity, campos));
 }
 
 /* Forward Projection */
