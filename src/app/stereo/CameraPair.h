@@ -23,6 +23,27 @@ inline ParallaxRange projected_gaussian_range(double z, double radius, double co
     return {std::max(0.,1/convergence-1/z+spread),std::max(0.,1/z-1/convergence+spread),true};
 }
 
+struct FitScene {
+    ParallaxRange support;
+    double convergence, focal;
+    int width;
+    bool orthographic;
+};
+
+inline double camera_offset(DepthLimits limits, const FitScene& scene) {
+    const auto& support = scene.support;
+    const auto focal = scene.focal;
+    const auto width = scene.width;
+    const auto orthographic = scene.orthographic;
+    const double factor = orthographic ? 1 : focal;
+    double amplitude = INFINITY;
+    if (support.sunk > 0) amplitude = limits.sunk * width / (1920. * factor * support.sunk);
+    if (support.popped > 0)
+        amplitude = std::min(amplitude,limits.popped * width / (1920. * factor * support.popped));
+    if (!std::isfinite(amplitude)) amplitude = 0;
+    return orthographic ? amplitude / (2 * focal) * scene.convergence : amplitude / 2;
+}
+
 inline CameraPair fit_camera_pair(std::optional<DepthLimits> limits, ParallaxRange support,
                                    double convergence, double focal, int width, bool orthographic,
                                    std::optional<ParallaxRange> envelope = {}) {
@@ -47,21 +68,16 @@ inline CameraPair fit_camera_pair(std::optional<DepthLimits> limits, ParallaxRan
           support.sunk >= 0 && support.popped >= 0)) {
         pair.state = CameraPair::State::NoSupport; return pair;
     }
-    const double factor = orthographic ? 1 : focal;
-    double amplitude = INFINITY;
-    if (support.sunk > 0) amplitude = limits->sunk * width / (1920. * factor * support.sunk);
-    if (support.popped > 0)
-        amplitude = std::min(amplitude,limits->popped * width / (1920. * factor * support.popped));
-    if (!std::isfinite(amplitude)) amplitude = 0;
+    const double offset = camera_offset(*limits,{support,convergence,focal,width,orthographic});
     if (orthographic) {
-        pair.left.shear = -amplitude / (2 * focal);
+        pair.left.shear = -offset / convergence;
         pair.right.shear = -pair.left.shear;
-        pair.left.offset = pair.left.shear * convergence;
+        pair.left.offset = -offset;
         pair.right.offset = -pair.left.offset;
     } else {
-        pair.left.offset = -amplitude / 2;
-        pair.right.offset = amplitude / 2;
-        pair.left.principal = -focal * amplitude / (2 * convergence);
+        pair.left.offset = -offset;
+        pair.right.offset = offset;
+        pair.left.principal = -focal * offset / convergence;
         pair.right.principal = -pair.left.principal;
     }
     return pair;
