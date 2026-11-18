@@ -258,6 +258,8 @@ void forward_3dgs(
     const bool output_score = engine().fwd.score_pending &&
                               engine().optim.accum_buffer.data_ptr() != nullptr;
     engine().fwd.score_pending = false;
+    const auto viewer_depth = engine().fwd.viewer_depth_pending;
+    engine().fwd.viewer_depth_pending = {};
     engine().fwd.image_fmt = engine().fwd.image_fmt_pending;
     engine().fwd.image_fmt_pending = PixelFormat::F32;
     const bool ppisp_in_forward = engine().ppisp.forward_pending;
@@ -510,7 +512,9 @@ void forward_3dgs(
     engine().fwd.tile_active = DeviceVector<int32_t>();
 
     SplatScoreRender score;
-    if (output_score) {
+    if (viewer_depth.enabled()) {
+        score = viewer_depth;
+    } else if (output_score) {
         const auto& ls = engine().learned_score;
         engine().fwd.render_score.resize(PoolSlot::RenderScore, engine().camera.num,
                                          engine().camera.height, engine().camera.width);

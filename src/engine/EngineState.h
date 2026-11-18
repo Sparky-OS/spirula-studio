@@ -166,6 +166,7 @@ struct ForwardCache {
     // Armed like the above by a step that fits the learned densification
     // score; the forward then renders render_score (else leaves it empty).
     bool                              score_pending = false;
+    SplatScoreRender                  viewer_depth_pending; // one forward only; worker-owned scratch
     DeviceTensor3D<float>             render_score;  // [C,H,W]
     // What the stages after the rasterizer write (armed like the above, by a
     // training step that stores its images compact), and how renders.rgb is

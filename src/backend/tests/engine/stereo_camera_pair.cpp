@@ -70,6 +70,32 @@ int main(int argc, char**) {
             close(a.right.principal,b.right.principal); close(a.right.shear,b.right.shear);
             close(a.support.popped,first.support.popped);
         }
+        for (const DepthLimits limits : {DepthLimits{10,4},DepthLimits{24,9.5}}) {
+            const ParallaxRange geometry{1,4,true};
+            for (int width : {960,1200,1920}) {
+                int calls = 0;
+                auto pixels = [&](double offset) {
+                    ++calls;
+                    return ParallaxRange{.15,.2+20*offset,true};
+                };
+                const auto pair = fit_camera_pair(limits,geometry,1,960,width,false,{},pixels);
+                const double offset = pair.right.offset;
+                if (!(offset > camera_offset(limits,{geometry,1,960,width,false,{},{}})))
+                    throw std::runtime_error("pixel means did not release the faint-layer envelope");
+                const double popped = 2*960*offset*(.2+20*offset);
+                if (popped > limits.popped*width/1920.)
+                    throw std::runtime_error("a moving pixel mean exceeds its limit");
+                if (calls < 3) throw std::runtime_error("candidate eyes were not rechecked");
+                const int before = calls;
+                fit_camera_pair({},geometry,1,960,width,false,{},pixels);
+                fit_camera_pair(DepthLimits{0,0},geometry,1,960,width,false,{},pixels);
+                if (calls != before) throw std::runtime_error("flat control evaluated a pixel budget");
+                const ParallaxRange auxiliary{.1,3,true};
+                const auto with_overlay = fit_camera_pair(limits,geometry,1,960,width,false,{},pixels,auxiliary);
+                if (2*960*with_overlay.right.offset*auxiliary.popped > limits.popped*width/1920.)
+                    throw std::runtime_error("overlay escaped the pixel-mean budget");
+            }
+        }
         std::vector<std::vector<uint8_t>> sources(4,std::vector<uint8_t>(8*4*6));
         for (size_t source = 0; source < sources.size(); ++source)
             for (int eye = 0; eye < 2; ++eye) for (int y = 0; y < 4; ++y) for (int x = 0; x < 8; ++x)

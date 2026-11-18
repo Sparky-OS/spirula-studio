@@ -104,7 +104,7 @@ struct RenderWorker::Impl {
     uint64_t next_id = 1;
 
     // Device scratch (worker thread only).
-    DevBuf d_buffer, d_depth, d_alpha, d_out;
+    DevBuf d_buffer, d_depth, d_alpha, d_out, d_depth_coefficients, d_depth_means;
     DevBuf d_intr, d_vm, d_dist, d_normals, d_depth_in;
 
     // ---- render worker -----------------------------------------------------
@@ -162,8 +162,16 @@ struct RenderWorker::Impl {
         result.views = 2;
     }
 
-    spirula::stereo::CameraPair stereo_cameras(const ViewRequest& q, const StereoRequest& request) {
+    struct FittedPixels {
+        double offset = -1, mean_seconds = 0;
+        int evaluations = 0;
+        ViewResult left_result, right_result;
+        std::vector<uint8_t> left, right;
+    };
+
+    spirula::stereo::CameraPair stereo_cameras(const ViewRequest& q, const StereoRequest& request, FittedPixels& fitted) {
         using namespace spirula::stereo;
+        const auto fit_started = std::chrono::steady_clock::now();
         if (!request.limits || (request.limits->sunk == 0 && request.limits->popped == 0))
             return camera_pair(request.limits, {}, request.convergence,q.fx,q.W,false);
         if (q.model != "PINHOLE" && q.model != "ORTHOGRAPHIC") {
@@ -268,19 +276,49 @@ struct RenderWorker::Impl {
             }
         }
         auto range = support.range(); range.z_min /= scale; range.z_max /= scale;
-        std::function<SceneProjection()> projection;
-        if (q.model == "PINHOLE" && !ray_traced && (q.primitive.empty() ? cfg.primitive : q.primitive) == "3dgs")
-            projection = [&] {
-                ViewResult centre;
-                render_once(q,centre);
-                SceneProjection snapshot;
-                snapshot.rows = engine_viewer_projection().rows;
-                std::copy(view,view+12,snapshot.view.begin());
-                snapshot.scale = scale; snapshot.width = q.W; snapshot.height = q.H;
-                return snapshot;
+        std::function<ParallaxRange(double)> pixel_means;
+        ParallaxRange auxiliary_bound;
+        if (extra.z_max >= extra.z_min && !ortho)
+            auxiliary_bound = {std::max(0.,1/request.convergence-1/extra.z_max),
+                               std::max(0.,1/extra.z_min-1/request.convergence),true};
+        if (request.envelope) {
+            auxiliary_bound.sunk = std::max(auxiliary_bound.sunk,request.envelope->sunk);
+            auxiliary_bound.popped = std::max(auxiliary_bound.popped,request.envelope->popped);
+        }
+        const auto primitive = q.primitive.empty() ? cfg.primitive : q.primitive;
+        if (q.model == "PINHOLE" && (primitive == "3dgs" || primitive == "mip")) {
+            std::vector<float> inverse_depth((size_t)count*2,1);
+            for (int64_t i=0; i<count; ++i) {
+                const double z = (view[8]*means[3*i]+view[9]*means[3*i+1]+view[10]*means[3*i+2]+view[11])/scale;
+                inverse_depth[2*i] = z > 0 && std::isfinite(z) ? (float)(1/z) : 0;
+            }
+            const void* coefficients = d_depth_coefficients.upload(inverse_depth.data(),inverse_depth.size()*sizeof(float));
+            void* depth_output = d_depth_means.ensure((size_t)q.W*q.H*sizeof(float));
+            pixel_means = [&,coefficients,depth_output](double offset) {
+                ParallaxRange result{0,0,true};
+                auto eye = [&](double displacement, ViewResult& output, std::vector<uint8_t>& pixels) {
+                    auto camera = q;
+                    for (int r=0; r<3; ++r) camera.c2w[r*4+3] += camera.c2w[r*4]*displacement;
+                    camera.cx += q.fx*displacement/request.convergence;
+                    camera.pick_px = -1;
+                    pixels = render_once(camera,output,coefficients,depth_output);
+                    const auto mean_started = std::chrono::steady_clock::now();
+                    const auto values = engine_viewer_depth_means(depth_output);
+                    fitted.mean_seconds += std::chrono::duration<double>(std::chrono::steady_clock::now()-mean_started).count();
+                    ++fitted.evaluations;
+                    if (values.covered_pixels) {
+                        result.sunk = std::max(result.sunk,1/request.convergence-values.minimum);
+                        result.popped = std::max(result.popped,values.maximum-1/request.convergence);
+                    }
+                };
+                eye(-offset,fitted.left_result,fitted.left);
+                if (offset > 0) eye(offset,fitted.right_result,fitted.right);
+                fitted.offset = offset;
+                return result;
             };
+        }
         auto pair = q.model == "PINHOLE" && !ray_traced
-            ? fit_camera_pair(request.limits,projected,request.convergence,q.fx,q.W,false,request.envelope,projection)
+            ? fit_camera_pair(request.limits,projected,request.convergence,q.fx,q.W,false,request.envelope,pixel_means,auxiliary_bound)
             : camera_pair(request.limits,range,request.convergence,q.fx,q.W,ortho,request.envelope);
 #ifdef SS_STEREO_DEPTH_STUDY_VISIBLE
         if (q.model!="PINHOLE" || ray_traced || (q.primitive.empty() ? cfg.primitive : q.primitive)!="3dgs")
@@ -301,6 +339,9 @@ struct RenderWorker::Impl {
                      low,high,original,pair.right.offset);
 #endif
         if (spirula::env_on("GUI_AUTOMATION")) {
+            std::fprintf(stderr,"[stereo-fit] evaluations=%d means_seconds=%.9g total_seconds=%.9g\n",
+                fitted.evaluations,fitted.mean_seconds,
+                std::chrono::duration<double>(std::chrono::steady_clock::now()-fit_started).count());
             std::fprintf(stderr,"[stereo-camera] W=%d H=%d fx=%.9g C=%.9g scale=%.9g z_min=%.9g z_max=%.9g offset=%.9g principal=%.9g shear=%.9g state=%d sunk_coefficient=%.9g popped_coefficient=%.9g first_unbounded_index=%lld bad_z=%.9g radius=%.9g\n",
                          q.W,q.H,q.fx,request.convergence,scale,range.z_min,range.z_max,pair.right.offset,pair.right.principal,pair.right.shear,(int)pair.state,projected.sunk,projected.popped,(long long)first_unbounded_index,bad_z,bad_radius);
             std::fprintf(stderr,"[stereo-centre] model=%s primitive=%s fy=%.9g cx=%.9g cy=%.9g view=",
@@ -337,7 +378,8 @@ struct RenderWorker::Impl {
                 res.step = hooks.current_step ? hooks.current_step() : -1;
                 if (p.stereo) {
                     ViewRequest centre = p.q;
-                    const auto cameras = stereo_cameras(centre,*p.stereo);
+                    FittedPixels fitted;
+                    const auto cameras = stereo_cameras(centre,*p.stereo,fitted);
                     res.pair_state = cameras.state;
                     res.cameras = cameras;
                     const bool flat = cameras.left.offset == cameras.right.offset &&
@@ -365,10 +407,12 @@ struct RenderWorker::Impl {
                             tvp(trace_depth.data(),4,{1,res.H,res.W,1}),
                             tvp(trace_transmittance.data(),4,{1,res.H,res.W,1}),tv_null(),tv_null());
                     }
-                    auto left_pixels = render_once(p.q,res);
+                    const bool cached = !(trace && *trace) && !flat && fitted.offset == cameras.right.offset;
+                    auto left_pixels = cached ? std::move(fitted.left) : render_once(p.q,res);
+                    if (cached) { const auto id=res.id; const auto step=res.step; res=fitted.left_result; res.id=id; res.step=step; res.cameras=cameras; res.pair_state=cameras.state; }
                     const auto left_projection = trace && *trace ? engine_viewer_projection() : EngineViewerProjection{};
                     ViewResult right_result;
-                    auto right_pixels = flat ? left_pixels : render_once(right,right_result);
+                    auto right_pixels = flat ? left_pixels : cached ? std::move(fitted.right) : render_once(right,right_result);
                     const auto right_projection = trace && *trace ? engine_viewer_projection() : EngineViewerProjection{};
                     pack_pair(left_pixels,right_pixels,res);
                     if (trace && *trace) {
@@ -500,7 +544,8 @@ struct RenderWorker::Impl {
 
     // ---- the actual render (trainer._render + get_outputs viewer subset) ---
 
-    std::vector<uint8_t> render_once(const ViewRequest& q, ViewResult& res) {
+    std::vector<uint8_t> render_once(const ViewRequest& q, ViewResult& res,
+                                     const void* depth_coefficients = nullptr, void* depth_output = nullptr) {
         if (cfg.scene_slot >= 0) engine_scene_activate(cfg.scene_slot);
         struct After {
             const std::function<void()>& callback;
@@ -833,6 +878,7 @@ struct RenderWorker::Impl {
                               tvp(vm, 4, {1, 4, 4}),
                               tvp(intr, 4, {1, 4}),
                               tvp(dist0, 4, {1, 8}));
+            if (depth_coefficients) engine_viewer_depth_prepare(depth_coefficients,depth_output);
             forward_3dgs(primitive, sh_deg, cfg.packed,
                          want_median, want_dist ? 2 : 0);
             if (!draw_on_device()) draw_on_host();

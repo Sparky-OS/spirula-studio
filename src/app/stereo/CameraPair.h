@@ -26,39 +26,50 @@ inline ParallaxRange projected_gaussian_range(double z, double radius, double co
     return {std::max(0.,1/convergence-1/z+spread),std::max(0.,1/z-1/convergence+spread),true};
 }
 
-struct SceneProjection {
-    std::vector<float> rows;
-    std::array<float,12> view;
-    double scale;
-    int width, height;
-};
-
 struct FitScene {
     ParallaxRange support;
     double convergence, focal;
     int width;
     bool orthographic;
-    std::function<SceneProjection()> projection;
+    std::function<ParallaxRange(double)> pixel_means;
+    ParallaxRange auxiliary;
 };
 
+// Native pixel means bound every positive-weight output-filter mixture.
+// Evaluate both eyes of the locked world at each candidate, not a stale frame.
 inline double camera_offset(DepthLimits limits, const FitScene& scene) {
-    const auto& support = scene.support;
-    const auto focal = scene.focal;
-    const auto width = scene.width;
-    const auto orthographic = scene.orthographic;
-    const double factor = orthographic ? 1 : focal;
-    double amplitude = INFINITY;
-    if (support.sunk > 0) amplitude = limits.sunk * width / (1920. * factor * support.sunk);
-    if (support.popped > 0)
-        amplitude = std::min(amplitude,limits.popped * width / (1920. * factor * support.popped));
-    if (!std::isfinite(amplitude)) amplitude = 0;
-    return orthographic ? amplitude / (2 * focal) * scene.convergence : amplitude / 2;
+    auto permitted = [&](ParallaxRange support) {
+        const double factor = scene.orthographic ? 1 : scene.focal;
+        double amplitude = INFINITY;
+        if (support.sunk > 0) amplitude = limits.sunk * scene.width / (1920. * factor * support.sunk);
+        if (support.popped > 0)
+            amplitude = std::min(amplitude,limits.popped * scene.width / (1920. * factor * support.popped));
+        if (!std::isfinite(amplitude)) amplitude = 0;
+        return scene.orthographic ? amplitude / (2 * scene.focal) * scene.convergence : amplitude / 2;
+    };
+    if (!scene.pixel_means) return permitted(scene.support);
+    auto bounded = [&](ParallaxRange means) {
+        means.sunk = std::max(means.sunk,scene.auxiliary.sunk);
+        means.popped = std::max(means.popped,scene.auxiliary.popped);
+        return means;
+    };
+    constexpr double guard = 1 - 1e-4;
+    double offset = permitted(bounded(scene.pixel_means(0))) * guard;
+    for (int iteration = 0; iteration < 32 && offset > 0; ++iteration) {
+        const double maximum = permitted(bounded(scene.pixel_means(offset)));
+        if (offset <= maximum * guard) return offset;
+        offset = std::min(offset,maximum) * guard;
+    }
+    // The geometry envelope is an independently safe bound if the moving
+    // pixel extrema do not converge. It cannot exceed either delivered limit.
+    return std::min(offset,permitted(scene.support)) * guard;
 }
 
 inline CameraPair fit_camera_pair(std::optional<DepthLimits> limits, ParallaxRange support,
                                    double convergence, double focal, int width, bool orthographic,
                                    std::optional<ParallaxRange> envelope = {},
-                                   std::function<SceneProjection()> projection = {}) {
+                                   std::function<ParallaxRange(double)> pixel_means = {},
+                                   ParallaxRange auxiliary = {}) {
     CameraPair pair;
     pair.support = support;
     if (envelope) {
@@ -80,7 +91,7 @@ inline CameraPair fit_camera_pair(std::optional<DepthLimits> limits, ParallaxRan
           support.sunk >= 0 && support.popped >= 0)) {
         pair.state = CameraPair::State::NoSupport; return pair;
     }
-    const double offset = camera_offset(*limits,{support,convergence,focal,width,orthographic,std::move(projection)});
+    const double offset = camera_offset(*limits,{support,convergence,focal,width,orthographic,std::move(pixel_means),auxiliary});
     if (orthographic) {
         pair.left.shear = -offset / convergence;
         pair.right.shear = -pair.left.shear;

@@ -87,6 +87,9 @@ std::string exec_arg(const std::string& s) {
 }  // namespace
 
 void register_desktop_entry() {
+#ifdef SS_EDITION_PACKAGE
+    return; // The package owns the menu entry and the Graphics-aware launcher.
+#endif
     const std::string exe = app::exe_path();
     const fs::path base = data_home();
     if (exe.empty() || base.empty()) return;
