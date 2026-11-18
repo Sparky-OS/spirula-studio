@@ -1043,6 +1043,10 @@ void ViewportPanel::upload(const ViewResult& res) {
         ++_pair_revision;
         _stereo_image_epoch = _pending_epoch;
         _pair_state = res.pair_state;
+        if (_pair_state == spirula::stereo::CameraPair::State::Ready &&
+            res.cameras.left.offset == res.cameras.right.offset &&
+            res.cameras.left.shear == res.cameras.right.shear)
+            _pair_state = spirula::stereo::CameraPair::State::ZeroLimits;
         _stereo_cameras = res.cameras;
         std::copy_n(_pending_stereo_pose,13,_image_stereo_pose);
         if (spirula::env_on("GUI_AUTOMATION"))

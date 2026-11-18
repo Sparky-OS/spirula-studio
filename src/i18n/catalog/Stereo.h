@@ -22,12 +22,13 @@ SS_MSG(no_limits,
     PT("Sem limites de profundidade. As imagens são idênticas."), IT("Limiti di profondità assenti. Le immagini sono identiche."),
     NL("Geen dieptegrenzen ontvangen. De beelden zijn gelijk."), RU("Нет пределов глубины. Изображения одинаковые."), TR("Derinlik sınırı alınmadı. İki resim de aynı."));
 SS_MSG(zero_limits,
-    EN("At zero depth limits, the two pictures are identical."), JA("奥行きの制限はゼロです。左右に同じ画像を表示します。"),
-    ZH_HANS("深度限制为零。双眼显示相同图像。"), ZH_HANT("深度限制為零。雙眼顯示相同影像。"),
-    KO("깊이 한도가 0입니다. 양쪽 눈에 같은 그림을 표시합니다."), DE("Die Tiefengrenzen sind null. Die Bilder sind identisch."),
-    FR("Limites de profondeur nulles. Les images sont identiques."), ES("Profundidad limitada a cero. Las imágenes son idénticas."),
-    PT("Limites de profundidade em zero. As imagens são idênticas."), IT("Limiti di profondità a zero. Le immagini sono identiche."),
-    NL("Dieptegrenzen op nul. De beelden zijn gelijk."), RU("Пределы глубины равны нулю. Изображения одинаковые."), TR("Derinlik sınırları sıfır. İki resim de aynı."));
+    EN("The two pictures are identical at these depth limits."), JA("現在の奥行きの制限では、左右に同じ画像を表示します。"),
+    ZH_HANS("在当前深度限制下，双眼显示相同图像。"), ZH_HANT("在目前的深度限制下，雙眼顯示相同影像。"),
+    KO("현재 깊이 한도에서는 양쪽 눈에 같은 그림을 표시합니다."), DE("Bei diesen Tiefengrenzen sind die Bilder identisch."),
+    FR("Avec ces limites de profondeur, les images sont identiques."), ES("Con estos límites de profundidad, las imágenes son idénticas."),
+    PT("Com estes limites de profundidade, as imagens são idênticas."), IT("Con questi limiti di profondità, le immagini sono identiche."),
+    NL("Bij deze dieptegrenzen zijn de beelden gelijk."), RU("При этих пределах глубины изображения одинаковые."),
+    TR("Bu derinlik sınırlarında iki resim de aynı."));
 SS_MSG(no_support,
     EN("No finite scene depth. The two pictures are identical."), JA("有限のシーン深度を決定できません。左右に同じ画像を表示します。"),
     ZH_HANS("无法确定有限的场景深度。双眼显示相同图像。"), ZH_HANT("無法確定有限的場景深度。雙眼顯示相同影像。"),
@@ -94,7 +95,7 @@ inline constexpr auto enable_pl = with_polish(enable,"Włącz 3D");
 inline constexpr auto resolution_pl = with_polish(resolution,"Szerokość renderowania na oko");
 inline constexpr auto display_settings_pl = with_polish(display_settings,"Ustawienia ekranu");
 inline constexpr auto no_limits_pl = with_polish(no_limits,"Brak limitów głębi. Oba obrazy są identyczne.");
-inline constexpr auto zero_limits_pl = with_polish(zero_limits,"Zerowe limity głębi. Oba obrazy są identyczne.");
+inline constexpr auto zero_limits_pl = with_polish(zero_limits,"Przy tych limitach głębi oba obrazy są identyczne.");
 inline constexpr auto no_support_pl = with_polish(no_support,"Głębia sceny nie jest skończona. Oba obrazy są identyczne.");
 inline constexpr auto rectified_pl = with_polish(rectified,"3D prostuje ten obiektyw do widoku perspektywicznego.");
 inline constexpr auto allocation_failed_pl = with_polish(allocation_failed,"Nie można przydzielić pamięci dla widoku 3D.");
