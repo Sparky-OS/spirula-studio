@@ -266,6 +266,13 @@ const char* ViewportPanel::camera_model_name() const {
 const char* ViewportPanel::camera_model_label(int model) {
     return kViewerCameraModels[std::clamp(model, 0, 4)].label->get();
 }
+int ViewportPanel::render_camera_model() const {
+    const bool limits = _stereo_limits && std::isfinite(_stereo_limits->sunk) &&
+        std::isfinite(_stereo_limits->popped) && _stereo_limits->sunk >= 0 && _stereo_limits->popped >= 0 &&
+        (_stereo_limits->sunk > 0 || _stereo_limits->popped > 0);
+    return stereo::settings().enabled && limits && _cam_model > 0 && _cam_model < 4 ? 0 : _cam_model;
+}
+
 float ViewportPanel::fov_min() const { return kViewerCameraModels[_cam_model].fov_min; }
 float ViewportPanel::fov_max() const { return kViewerCameraModels[_cam_model].fov_max; }
 
@@ -279,6 +286,7 @@ void ViewportPanel::compute_intrinsics(int W, int H, float& fx, float& fy) const
     } else {
         fov_to_intrinsics(_fov_deg[_cam_model], W, H, model, fx, fy);
     }
+    if (_cam_model == 3 && render_camera_model() == 0) fy = fx;
     if (_ortho) {
         fx /= std::max(nav_dist(), 1e-6f);
         fy /= std::max(nav_dist(), 1e-6f);
@@ -359,9 +367,14 @@ void ViewportPanel::frame_view(const float centre[3], float radius) {
     // The narrower half-angle of the view, kept sane for the wide lenses.
     constexpr float kDeg = 3.14159265f / 180.0f;
     const float aspect = _img_w > 1.0f && _img_h > 1.0f ? _img_h / _img_w : 0.5625f;
-    const float hx = 0.5f * std::min(_fov_deg[_cam_model] > 0.0f ? _fov_deg[_cam_model] : 90.0f,
-                                     170.0f) * kDeg;
-    const float hy = std::atan(std::tan(hx) * aspect);
+    float hx = 0.5f * std::min(_fov_deg[_cam_model] > 0.0f ? _fov_deg[_cam_model] : 90.0f,
+                              170.0f) * kDeg;
+    float hy = std::atan(std::tan(hx) * aspect);
+    if (render_camera_model() != _cam_model) {
+        float fx,fy;
+        compute_intrinsics(1000,(int)std::lround(1000*aspect),fx,fy);
+        hx = std::atan(500/fx); hy = std::atan(500*aspect/fy);
+    }
     const float a = std::clamp(std::min(hx, hy), 5.0f * kDeg, 60.0f * kDeg);
     for (int i = 0; i < 3; i++) {
         _frame_from[i] = _cam.target[i];
@@ -615,7 +628,7 @@ void ViewportPanel::build_request(ViewRequest& q, int W, int H) const {
     q.cy = 0.5f * (float)H;
     q.W = W;
     q.H = H;
-    q.model = camera_model_name();
+    q.model = kViewerCameraModels[render_camera_model()].name;
     q.key = _buffer_keys.empty() ? "rgb" : _buffer_keys[_buffer_idx];
     q.show_cams = _show_cams && _has_cameras;
     q.show_grid = _show_grid && !external_grid();
@@ -692,7 +705,7 @@ void ViewportPanel::view_camera(int W, int H, float w2c[12], float& fx,
     cv_w2c(m, w2c, eye);
     compute_intrinsics(W, H, fx, fy);
     if (_ortho) { fx *= _m2s_scale; fy *= _m2s_scale; }
-    camera_model = _cam_model;
+    camera_model = render_camera_model();
 }
 
 void ViewportPanel::nav_camera(int W, int H, float w2c[12], float& fx,
@@ -702,7 +715,7 @@ void ViewportPanel::nav_camera(int W, int H, float w2c[12], float& fx,
     render_c2w(m);
     cv_w2c(m, w2c, eye);
     compute_intrinsics(W, H, fx, fy);
-    camera_model = _cam_model;
+    camera_model = render_camera_model();
 }
 
 void ViewportPanel::nav_pose(float c2w[12], float target[3]) const {
@@ -1865,6 +1878,8 @@ void ViewportPanel::draw(bool training, int step) {
     if (stereo::settings().enabled) {
         namespace text = spirula::i18n::msg::stereo;
         using State = spirula::stereo::CameraPair::State;
+        if (render_camera_model() != _cam_model)
+            ui::TextWrapped(stereo::translated(text::rectified,text::rectified_pl));
         if (_pair_state == State::NoLimits) ui::TextWrapped(stereo::translated(text::no_limits,text::no_limits_pl));
         else if (_pair_state == State::ZeroLimits) ui::TextWrapped(stereo::translated(text::zero_limits,text::zero_limits_pl));
         else if (_pair_state == State::NoSupport) ui::TextWrapped(stereo::translated(text::no_support,text::no_support_pl));
@@ -1930,7 +1945,7 @@ unsigned ViewportPanel::pump_preview(const ImVec2& avail, int& W, int& H) {
     PreviewStyle style;
     style.point_px = _point_px;
     auto render = [&](const spirula::stereo::EyeCamera* eye) {
-        return _preview.render(W,H,view,(PreviewProjection)_cam_model,
+        return _preview.render(W,H,view,(PreviewProjection)render_camera_model(),
                                fx/(0.5f*W),fy/(0.5f*H),_home_dist,
                                nav_dist()/_m2s_scale,target,_show_cams,_frustum_scale,
                                _show_grid && !external_grid(),&style,eye);
@@ -1938,7 +1953,7 @@ unsigned ViewportPanel::pump_preview(const ImVec2& avail, int& W, int& H) {
     if (!stereo_on) { _preview_tex = render(nullptr); return _preview_tex; }
     std::optional<spirula::stereo::DepthLimits> limits;
     if (_stereo_limits) limits = {_stereo_limits->sunk,_stereo_limits->popped};
-    const auto cameras = _preview.stereo_cameras(limits,view,(PreviewProjection)_cam_model,
+    const auto cameras = _preview.stereo_cameras(limits,view,(PreviewProjection)render_camera_model(),
         fx,fy,W,H,_home_dist,nav_dist()/_m2s_scale,target,_show_cams,_frustum_scale,
         _show_grid && !external_grid());
     if (!render(&cameras.left)) return 0;
@@ -1990,7 +2005,7 @@ void ViewportPanel::draw_preview(const ImVec2& avail) {
         const float v = (_tool_pick_uv[1] - 0.5f) * (float)H / fy;
         float dcv[3], m[12];
         model_c2w(m);
-        if (viewer_pixel_ray(_cam_model, u, v, dcv)) {
+        if (viewer_pixel_ray(render_camera_model(), u, v, dcv)) {
             float ro[3] = {m[3], m[7], m[11]}, rd[3], p[3];
             for (int r = 0; r < 3; r++)
                 rd[r] = m[r*4+0]*dcv[0] - m[r*4+1]*dcv[1] - m[r*4+2]*dcv[2];
@@ -2010,7 +2025,7 @@ void ViewportPanel::draw_preview(const ImVec2& avail) {
         float u = (_dbl_u - 0.5f) * (float)W / fx;
         float v = (_dbl_v - 0.5f) * (float)H / fy;
         float dcv[3];
-        if (viewer_pixel_ray(_cam_model, u, v, dcv)) {
+        if (viewer_pixel_ray(render_camera_model(), u, v, dcv)) {
             float m[12];
             model_c2w(m);
             float ro[3] = {m[3], m[7], m[11]}, rd[3], p[3];

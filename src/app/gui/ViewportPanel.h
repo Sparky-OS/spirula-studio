@@ -307,6 +307,7 @@ private:
     // toward it instead.
     void recenter_at(const float p[3]);
     const char* camera_model_name() const;
+    int render_camera_model() const;
     float fov_min() const;
     float fov_max() const;
     void compute_intrinsics(int W, int H, float& fx, float& fy) const;

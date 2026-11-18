@@ -35,6 +35,14 @@ SS_MSG(no_support,
     FR("Profondeur non finie. Les images sont identiques."), ES("Profundidad no finita. Las imágenes son idénticas."),
     PT("Profundidade não finita. As imagens são idênticas."), IT("Profondità non finita. Le immagini sono identiche."),
     NL("Geen eindige scènediepte. De beelden zijn gelijk."), RU("Глубина сцены не конечна. Изображения одинаковые."), TR("Sahne derinliği sonlu değil. İki resim de aynı."));
+SS_MSG(rectified,
+    EN("3D rectifies this lens to a perspective view."), JA("3D 表示ではこのレンズを透視投影に変換します。"),
+    ZH_HANS("3D 将此镜头校正为透视视图。"), ZH_HANT("3D 將此鏡頭校正為透視視圖。"),
+    KO("3D에서는 이 렌즈를 원근 투영으로 보정합니다."), DE("3D entzerrt dieses Objektiv zu einer perspektivischen Ansicht."),
+    FR("La 3D rectifie cet objectif en vue perspective."), ES("El 3D rectifica esta lente a una vista en perspectiva."),
+    PT("O 3D retifica esta lente para uma vista em perspectiva."), IT("Il 3D rettifica questo obiettivo in una vista prospettica."),
+    NL("3D rectificeert deze lens naar een perspectiefweergave."), RU("В 3D этот объектив преобразуется в перспективный вид."),
+    TR("3B, bu merceği perspektif görünüme düzeltir."));
 SS_MSG(settings_failed,
     EN("Could not open Display Settings."), JA("ディスプレイ設定を開けませんでした。"), ZH_HANS("无法打开显示设置。"), ZH_HANT("無法開啟顯示設定。"),
     KO("디스플레이 설정을 열지 못했습니다."), DE("Anzeigeeinstellungen konnten nicht geöffnet werden."), FR("Impossible d’ouvrir la configuration de l’affichage."), ES("No se pudo abrir la configuración de pantalla."),
@@ -48,6 +56,7 @@ inline constexpr auto display_settings_pl = with_polish(display_settings,"Ustawi
 inline constexpr auto no_limits_pl = with_polish(no_limits,"Brak limitów głębi. Oba obrazy są identyczne.");
 inline constexpr auto zero_limits_pl = with_polish(zero_limits,"Zerowe limity głębi. Oba obrazy są identyczne.");
 inline constexpr auto no_support_pl = with_polish(no_support,"Głębia sceny nie jest skończona. Oba obrazy są identyczne.");
+inline constexpr auto rectified_pl = with_polish(rectified,"3D prostuje ten obiektyw do widoku perspektywicznego.");
 inline constexpr auto settings_failed_pl = with_polish(settings_failed,"Nie można otworzyć ustawień ekranu.");
 }  // namespace spirula::i18n::msg::stereo
 #include "i18n/EndCatalog.h"
