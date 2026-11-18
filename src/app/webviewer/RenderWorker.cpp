@@ -2,6 +2,9 @@
 
 #include "app/webviewer/RenderWorker.h"
 #include "app/webviewer/PairTrace.h"
+#ifdef SS_STEREO_DEPTH_STUDY_VISIBLE
+#include "app/stereo/VisibleFitStudy.h"
+#endif
 
 #include "backend/api/BackendRuntime.h"
 #include "engine/Engine.h"    // engine render + viewer entry points
@@ -265,9 +268,26 @@ struct RenderWorker::Impl {
             }
         }
         auto range = support.range(); range.z_min /= scale; range.z_max /= scale;
-        const auto pair = q.model == "PINHOLE" && !ray_traced
+        auto pair = q.model == "PINHOLE" && !ray_traced
             ? fit_camera_pair(request.limits,projected,request.convergence,q.fx,q.W,false,request.envelope)
             : camera_pair(request.limits,range,request.convergence,q.fx,q.W,ortho,request.envelope);
+#ifdef SS_STEREO_DEPTH_STUDY_VISIBLE
+        if (q.model!="PINHOLE" || ray_traced || (q.primitive.empty() ? cfg.primitive : q.primitive)!="3dgs")
+            throw std::runtime_error("depth study: only pinhole 3dgs is measured");
+        ViewResult centre_result;
+        render_once(q,centre_result);
+        const auto projection=engine_viewer_projection();
+        const auto depths=study::axial_depths(projection.rows,view,scale);
+        const auto contributions=study::raster(projection.rows,depths,q.W,q.H,[](size_t,size_t,float) {});
+        const double low=study::quantile(depths,contributions.weight,.01);
+        const double high=study::quantile(depths,contributions.weight,.99);
+        const ParallaxRange visible{std::max(0.,1/request.convergence-1/high),
+                                    std::max(0.,1/low-1/request.convergence),true};
+        const double original=pair.right.offset;
+        pair=fit_camera_pair(request.limits,visible,request.convergence,q.fx,q.W,false);
+        std::fprintf(stderr,"[depth-study] q01=%.17g q99=%.17g original_offset=%.17g visible_offset=%.17g\n",
+                     low,high,original,pair.right.offset);
+#endif
         if (spirula::env_on("GUI_AUTOMATION")) {
             std::fprintf(stderr,"[stereo-camera] W=%d H=%d fx=%.9g C=%.9g scale=%.9g z_min=%.9g z_max=%.9g offset=%.9g principal=%.9g shear=%.9g state=%d sunk_coefficient=%.9g popped_coefficient=%.9g unbounded=%lld bad_z=%.9g radius=%.9g\n",
                          q.W,q.H,q.fx,request.convergence,scale,range.z_min,range.z_max,pair.right.offset,pair.right.principal,pair.right.shear,(int)pair.state,projected.sunk,projected.popped,(long long)first_unbounded,bad_z,bad_radius);
