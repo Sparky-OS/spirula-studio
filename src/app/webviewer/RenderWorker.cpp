@@ -9,6 +9,7 @@
 #include "data/FrustumSize.h"
 #include "app/webviewer/RegionOverlay.h"
 #include "app/stereo/SceneSupport.h"
+#include "core/Env.h"
 
 #include <algorithm>
 #include <atomic>
@@ -173,6 +174,8 @@ struct RenderWorker::Impl {
         const double left = (q.cx + principal)/q.fx, right = (q.W-q.cx+principal)/q.fx;
         const double top = q.cy/q.fy, bottom = (q.H-q.cy)/q.fy;
         SceneSupport support;
+        int64_t first_unbounded = -1;
+        double bad_z = 0, bad_radius = 0;
         for (int64_t i = 0; i < engine_get_cur_num_splats(); ++i) {
             const double alpha = opacity[i] >= 0 ? 1./(1.+std::exp(-opacity[i])) :
                                 std::exp(opacity[i])/(1.+std::exp(opacity[i]));
@@ -185,9 +188,14 @@ struct RenderWorker::Impl {
                 support.z_min = std::min(support.z_min,p[2]-radius);
                 support.z_max = std::max(support.z_max,p[2]+radius);
             } else support.sphere(p[0],p[1],p[2],radius,left,right,top,bottom,sweep);
+            if (support.z_min <= 0 && first_unbounded < 0) { first_unbounded=i;bad_z=p[2];bad_radius=radius; }
         }
         auto range = support.range(); range.z_min /= scale; range.z_max /= scale;
-        return camera_pair(request.limits,range,request.convergence,q.fx,q.W,q.model=="ORTHOGRAPHIC");
+        const auto pair = camera_pair(request.limits,range,request.convergence,q.fx,q.W,q.model=="ORTHOGRAPHIC");
+        if (spirula::env_on("GUI_AUTOMATION"))
+            std::fprintf(stderr,"[stereo-camera] W=%d H=%d fx=%.9g C=%.9g scale=%.9g z_min=%.9g z_max=%.9g offset=%.9g principal=%.9g shear=%.9g state=%d unbounded=%lld bad_z=%.9g radius=%.9g\n",
+                         q.W,q.H,q.fx,request.convergence,scale,range.z_min,range.z_max,pair.right.offset,pair.right.principal,pair.right.shear,(int)pair.state,(long long)first_unbounded,bad_z,bad_radius);
+        return pair;
     }
 
     void worker_loop() {

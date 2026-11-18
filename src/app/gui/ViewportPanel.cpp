@@ -1021,6 +1021,9 @@ void ViewportPanel::upload(const ViewResult& res) {
         ++_pair_revision;
         _stereo_image_epoch = _pending_epoch;
         _pair_state = res.pair_state;
+        if (spirula::env_on("GUI_AUTOMATION"))
+            std::fprintf(stderr,"[stereo-present] request=%llu revision=%llu step=%d epoch=%llu\n",
+                         (unsigned long long)res.id,(unsigned long long)_pair_revision,res.step,(unsigned long long)_stereo_epoch);
     } else _pair_pixels.clear();
     _tex_w = res.W;
     _tex_h = res.H;
