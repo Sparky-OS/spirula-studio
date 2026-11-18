@@ -14,6 +14,10 @@
 #include "app/DepthPng.h"
 #include "app/FrameLook.h"
 #include "app/GeometryModel.h"
+#include "core/InstalledModels.h"
+#ifdef SS_EDITION_PACKAGE
+#include <unistd.h>
+#endif
 #include "app/GeometryWarp.h"
 #include "app/WriterPool.h"
 #include "app/cli/LicenseCli.h"
@@ -733,6 +737,13 @@ std::string gb(uint64_t b) {
 // Checks the disk before anything streams: a 45 GB install that fails at 80%
 // for want of space is the failure this exists to prevent.
 int install_model(const std::string& id, bool depth, bool normal) {
+#ifdef SS_EDITION_PACKAGE
+    if (geteuid()!=0) {
+        std::fprintf(stderr,"%s\n",spirula::installed_models::message(
+            normal && !depth ? "marigold-v2/normals.safetensors" : "marigold-v2/depth.safetensors").c_str());
+        return 1;
+    }
+#endif
     const app::GeometryInstall need = app::geometry_install_needs(id, depth, normal);
     if (!need.needed()) return 0;
     std::printf("%s\n", format(G::log_install_plan, {id, gb(need.download), gb(need.disk),
@@ -908,6 +919,11 @@ int spirula_geometry_main(int argc, char** argv) {
         const app::GeometryInstall need =
             app::geometry_install_needs(o.model, o.want_depth, o.want_normal);
         if (need.needed()) {
+#ifdef SS_EDITION_PACKAGE
+            std::fprintf(stderr,"%s\n",spirula::installed_models::message(
+                o.want_normal && !o.want_depth ? "marigold-v2/normals.safetensors" : "marigold-v2/depth.safetensors").c_str());
+            return 1;
+#else
             std::fprintf(stderr, "%s\n",
                          format(G::err_not_installed, {o.model, app::program_name(),
                                                        gb(need.download), gb(need.disk)})
@@ -918,6 +934,7 @@ int spirula_geometry_main(int argc, char** argv) {
             const std::string answer = io.read_line();
             if (answer != "y" && answer != "Y" && answer != "yes") return 1;
             if (const int rc = install_model(o.model, o.want_depth, o.want_normal)) return rc;
+#endif
         }
 
         app::GeometryModel pred;

@@ -1,6 +1,8 @@
 // GeometryRunner.cpp -- see GeometryRunner.h.
 
 #include "app/gui/GeometryRunner.h"
+#include "core/InstalledModels.h"
+#include "marigold/model/Install.h"
 
 #include "app/FrameMask.h"
 #include "app/AppPaths.h"
@@ -111,6 +113,16 @@ std::vector<PendingDownload> geometry_model_downloads(const std::string& id) {
         if (!file_is_cached(dest, f.bytes)) out.push_back(pending_download(f));
     };
     if (id == marigold::kModelId) {
+#ifdef SS_EDITION_PACKAGE
+        for (const auto task : {marigold::Task::Depth,marigold::Task::Normals}) {
+            const auto name = std::string("marigold-v2/")+marigold::task_name(task)+".safetensors";
+            if (!marigold::base_installed() || !marigold::task_installed(task)) {
+                PendingDownload d;
+                d.dest = spirula::installed_models::path(name);
+                out.push_back(d);
+            }
+        }
+#else
         // Both maps: a run that later turns depth on should not stop for a second
         // install. The child checks the disk before anything streams.
         const app::GeometryInstall need = install_needs(id);
@@ -121,6 +133,7 @@ std::vector<PendingDownload> geometry_model_downloads(const std::string& id) {
                          "geometry", "--install", id, "--depth"};
             out.push_back(d);
         }
+#endif
         // Its depth is anchored to MoGe-2's.
         want(moge::find_model_source("moge2-vitb")->checkpoint);
     } else if (const moge::ModelSource* m = moge::find_model_source(id)) {

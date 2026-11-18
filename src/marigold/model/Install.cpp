@@ -1,4 +1,5 @@
 #include "marigold/model/Install.h"
+#include "core/InstalledModels.h"
 
 #include "core/AtomicFile.h"
 #include "core/Sha256.h"
@@ -775,8 +776,18 @@ private:
 
 }  // namespace
 
-bool base_installed() { return format_is(base_path(), kBaseFormat); }
-bool task_installed(Task t) { return format_is(task_path(t), kTaskFormat); }
+bool base_installed() {
+#ifdef SS_EDITION_PACKAGE
+    if (!spirula::installed_models::verified("marigold-v2/base.safetensors")) return false;
+#endif
+    return format_is(base_path(), kBaseFormat);
+}
+bool task_installed(Task t) {
+#ifdef SS_EDITION_PACKAGE
+    if (!spirula::installed_models::verified("marigold-v2/"+std::string(task_name(t))+".safetensors")) return false;
+#endif
+    return format_is(task_path(t), kTaskFormat);
+}
 
 bool InstallNeeds::fits() const { return free >= disk + kDiskSpare; }
 

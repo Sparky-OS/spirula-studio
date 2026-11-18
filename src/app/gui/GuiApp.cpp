@@ -4441,6 +4441,11 @@ bool GuiApp::license_accepted(const std::string& family) const {
 void GuiApp::request_licenses(std::vector<std::string> families,
                               std::function<void()> then,
                               std::function<void()> declined) {
+#ifdef SS_EDITION_PACKAGE
+    // Model-profile installation owns consent. This records no acceptance.
+    if (then) then();
+    return;
+#endif
     if (!_license_prompt.empty()) return;
     _license_queue = std::move(families);
     _license_then = std::move(then);
@@ -4493,6 +4498,7 @@ void GuiApp::request_model_download(const std::string& id, const std::string& de
     if (!e || _download.state() == ModelDownload::State::Running) return;
     _license_notice.clear();
     const TextDetector* d = detector_for(*e, detector_id);
+#ifndef SS_EDITION_PACKAGE
     const std::string families[] = {model_is_cached(*e) ? "" : e->family,
                                     d && !detector_is_cached(*d) ? spirula::license::family::kGdino : ""};
     for (const std::string& family : families)
@@ -4503,6 +4509,7 @@ void GuiApp::request_model_download(const std::string& id, const std::string& de
             _license_tick = false;
             return;
         }
+#endif
     if (_download.start(*e, d)) {
         _download_model_id = id;
         _download_detector_id = detector_id;
