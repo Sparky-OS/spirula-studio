@@ -10,8 +10,8 @@
 #include <stdexcept>
 
 namespace {
-TorchTensorView host(std::vector<float>& data, std::vector<int64_t> shape) {
-    return {(uint64_t)(uintptr_t)data.data(),4,std::move(shape)};
+template<class T> TorchTensorView host(std::vector<T>& data, std::vector<int64_t> shape) {
+    return {(uint64_t)(uintptr_t)data.data(),(uint32_t)sizeof(T),std::move(shape)};
 }
 size_t pool_bytes() {
     size_t bytes = engine_get_scratch_bytes();
@@ -30,6 +30,10 @@ int main(int argc, char** argv) {
             host(cloud.scales,{cloud.num,3}),host(cloud.opacities,{cloud.num,1}),host(cloud.features_dc,{cloud.num,3}),
             host(cloud.features_sh,{cloud.num,cloud.coeffs(),3}),cloud.sb_lobes);
         engine_scene_activate(0);
+        std::vector<float> intr{32,32,32,32}, dist(kCameraDistortionParams,0), pose{1,0,0,0,0,1,0,0,0,0,1,0};
+        std::vector<int32_t> models{0}, sizes{64}, tiers{0};
+        engine_viewer_init(host(models,{1}),host(intr,{1,4}),host(dist,{1,kCameraDistortionParams}),
+                           host(tiers,{1}),host(pose,{1,3,4}),host(sizes,{1}),host(sizes,{1}),1e-3f);
         float low[3] = {INFINITY,INFINITY,INFINITY}, high[3] = {-INFINITY,-INFINITY,-INFINITY};
         for (int64_t i = 0; i < cloud.num; ++i) for (int k = 0; k < 3; ++k) {
             low[k] = std::min(low[k],cloud.means[3*i+k]); high[k] = std::max(high[k],cloud.means[3*i+k]);

@@ -1,6 +1,8 @@
 #include "app/gui/ViewportPanel.h"
 #include "app/gui/stereo/Settings.h"
 #include "app/stereo/PairComposition.h"
+#include "core/Env.h"
+#include <cstdio>
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -71,6 +73,9 @@ const std::vector<uint8_t>* ViewportPanel::stereo_pixels() {
         _comparison_pixels = spirula::stereo::compose_pair(regions,_tex_w,_tex_h);
         _comparison_stamp = std::move(stamp);
         ++_comparison_revision;
+        if (spirula::env_on("GUI_AUTOMATION"))
+            std::fprintf(stderr,"[stereo-comparison] sources=%zu revision=%llu shared_eye=%.9g\n",
+                         _wipe_sources.size(),(unsigned long long)_comparison_revision,offset);
     }
     return _comparison_pixels.empty() ? nullptr : &_comparison_pixels;
 }

@@ -91,6 +91,27 @@ void check_limits(RenderWorker& worker) {
                     different |= !std::equal(pair.rgb8.begin()+2*y*row,pair.rgb8.begin()+(2*y+1)*row,
                                              pair.rgb8.begin()+(2*y+1)*row);
                 require(different,"a finite scene was flattened");
+                auto envelope = pair.cameras.support;
+                envelope.sunk *= 2; envelope.popped *= 2;
+                ViewResult capped;
+                require(worker.wait_result(worker.submit_stereo(q,2.5,limits,envelope),capped,120) &&
+                        capped.error.empty(),"comparison envelope failed");
+                require(std::abs(capped.cameras.right.offset-pair.cameras.right.offset/2) < 1e-7,
+                        "comparison envelope did not cap the cameras");
+                require(capped.cameras.support.sunk == pair.cameras.support.sunk &&
+                        capped.cameras.support.popped == pair.cameras.support.popped,
+                        "comparison envelope replaced the scene's own support");
+                ViewRequest eyes[2] = {q,q};
+                const spirula::stereo::EyeCamera cameras[2] = {capped.cameras.left,capped.cameras.right};
+                for (int eye = 0; eye < 2; ++eye) {
+                    for (int r = 0; r < 3; ++r)
+                        eyes[eye].c2w[4*r+3] += eyes[eye].c2w[4*r]*cameras[eye].offset;
+                    eyes[eye].cx += cameras[eye].principal; eyes[eye].view_shear = cameras[eye].shear;
+                }
+                ViewResult independent;
+                require(worker.wait_result(worker.submit_pair(eyes[0],eyes[1]),independent,120) &&
+                        independent.error.empty() && independent.rgb8 == capped.rgb8,
+                        "comparison pair differs from independent eye requests");
             }
         }
 }
