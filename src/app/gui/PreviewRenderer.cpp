@@ -261,7 +261,7 @@ void main() {
     v_view = v;
     v_world = a_pos;
     if (u_model == 4) {
-        gl_Position = vec4(u_s * v.xy, z, 1.0);
+        gl_Position = vec4(u_s * vec2(v.x-u_eye.y*v.z,v.y), z, 1.0);
     } else if (u_model == 0 && u_tier == 0) {
         // PINHOLE: emit a REAL clip-space position (w = -z_view) so the
         // hardware clips triangles at the near plane. Writing NDC with w = 1
@@ -271,7 +271,7 @@ void main() {
         // The projected triangle IS the triangle of projected vertices under
         // perspective, so past the clip there is nothing to discard.
         float w = -v.z;
-        gl_Position = vec4(u_s * v.xy, z * w, w);
+        gl_Position = vec4(u_s * v.xy+vec2(u_eye.x*w,0), z * w, w);
     } else {
         // The curved models have no linear clip space; NDC goes out directly
         // and the fragment shader rejects what wrapped (see kMeshFrag).

@@ -588,6 +588,14 @@ if(SS_BUILD_GUI)
         ${SS_SRC}/app/gui/Subprocess.cpp)
     ss_configure_app(command_argv_test)
 
+    add_executable(preview_stereo_test
+        ${SS_SRC}/app/gui/tests/preview_stereo_test.cpp
+        ${SS_SRC}/app/gui/PreviewRenderer.cpp
+        ${SS_SRC}/app/gui/PreviewStereo.cpp
+        ${SS_SRC}/app/gui/GlLoader.cpp)
+    ss_configure_app(preview_stereo_test)
+    target_link_libraries(preview_stereo_test PRIVATE glfw OpenGL::GL)
+
     add_executable(dense_live_preview_test
         ${SS_SRC}/app/gui/tests/dense_live_preview_test.cpp
         ${SS_SRC}/app/gui/SfmProgress.cpp

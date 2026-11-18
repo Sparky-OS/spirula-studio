@@ -195,9 +195,9 @@ struct RenderWorker::Impl {
                 if (centre_x+shift+extent_x < 0 || centre_x-shift-extent_x > q.W ||
                     centre_y+extent_y < 0 || centre_y-extent_y > q.H) continue;
                 const double z = p[2]/scale, reach = radius/scale;
-                const double spread = reach/(z*z);
-                projected.sunk = std::max(projected.sunk,1/request.convergence-1/z+spread);
-                projected.popped = std::max(projected.popped,1/z-1/request.convergence+spread);
+                const auto gaussian = projected_gaussian_range(z,reach,request.convergence);
+                projected.sunk = std::max(projected.sunk,gaussian.sunk);
+                projected.popped = std::max(projected.popped,gaussian.popped);
                 projected.valid = true;
             }
             if (q.model == "ORTHOGRAPHIC") {
@@ -251,22 +251,27 @@ struct RenderWorker::Impl {
         }
         const auto extra = auxiliary.range();
         if (extra.z_max >= extra.z_min) {
-            if (ortho) {
-                support.z_min = std::min(support.z_min,extra.z_min*scale);
-                support.z_max = std::max(support.z_max,extra.z_max*scale);
-            } else {
+            support.z_min = std::min(support.z_min,extra.z_min*scale);
+            support.z_max = std::max(support.z_max,extra.z_max*scale);
+            if (!ortho) {
                 projected.sunk = std::max(projected.sunk,1/request.convergence-1/extra.z_max);
                 projected.popped = std::max(projected.popped,1/extra.z_min-1/request.convergence);
                 projected.valid = true;
             }
         }
         auto range = support.range(); range.z_min /= scale; range.z_max /= scale;
-        const auto pair = q.model == "PINHOLE"
+        const bool ray_traced = (q.primitive.empty() ? cfg.primitive : q.primitive) == "3dgut";
+        const auto pair = q.model == "PINHOLE" && !ray_traced
             ? fit_camera_pair(request.limits,projected,request.convergence,q.fx,q.W,false)
-            : camera_pair(request.limits,range,request.convergence,q.fx,q.W,true);
-        if (spirula::env_on("GUI_AUTOMATION"))
+            : camera_pair(request.limits,range,request.convergence,q.fx,q.W,ortho);
+        if (spirula::env_on("GUI_AUTOMATION")) {
             std::fprintf(stderr,"[stereo-camera] W=%d H=%d fx=%.9g C=%.9g scale=%.9g z_min=%.9g z_max=%.9g offset=%.9g principal=%.9g shear=%.9g state=%d sunk_coefficient=%.9g popped_coefficient=%.9g unbounded=%lld bad_z=%.9g radius=%.9g\n",
                          q.W,q.H,q.fx,request.convergence,scale,range.z_min,range.z_max,pair.right.offset,pair.right.principal,pair.right.shear,(int)pair.state,projected.sunk,projected.popped,(long long)first_unbounded,bad_z,bad_radius);
+            std::fprintf(stderr,"[stereo-centre] model=%s primitive=%s fy=%.9g cx=%.9g cy=%.9g view=",
+                         q.model.c_str(),(q.primitive.empty() ? cfg.primitive : q.primitive).c_str(),q.fy,q.cx,q.cy);
+            for (int i = 0; i < 12; ++i) std::fprintf(stderr,"%s%.9g",i ? "," : "",view[i]);
+            std::fputc('\n',stderr);
+        }
         return pair;
     }
 

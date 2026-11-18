@@ -57,19 +57,22 @@ int main(int argc, char**) {
         if (hidden.range().z_min <= hidden.range().z_max)
             throw std::runtime_error("hidden geometry changed the camera fit");
         const DepthLimits limits{10,4};
-        const double focal = 1000, convergence = 3, z = 1, radius = 2;
-        const ParallaxRange gaussian{1/convergence-1/z+radius/(z*z),1/z-1/convergence+radius/(z*z),true};
-        const auto fitted = fit_camera_pair(limits,gaussian,convergence,focal,1200,false);
-        if (!(fitted.right.offset > 0)) throw std::runtime_error("finite projected Gaussian was flattened");
-        for (double dz : {-radius,radius}) {
-            double pixels[2]; int i = 0;
-            for (auto eye : {fitted.left,fitted.right}) {
-                const double x = .2-eye.offset;
-                pixels[i++] = focal*x/z+eye.principal-focal*x*dz/(z*z);
+        const double focal = 1000, convergence = 3;
+        for (double z : {1.,6.}) for (double radius : {2.,8.}) {
+            const auto gaussian = projected_gaussian_range(z,radius,convergence);
+            const auto fitted = fit_camera_pair(limits,gaussian,convergence,focal,1200,false);
+            if (!(fitted.right.offset > 0)) throw std::runtime_error("finite projected Gaussian was flattened");
+            for (double dz : {-radius,radius}) for (double world_x : {-100.,.2,100.}) {
+                double pixels[2]; int i = 0;
+                for (auto eye : {fitted.left,fitted.right}) {
+                    const double x = world_x-eye.offset, cx = 600+eye.principal;
+                    const double jacobian = std::clamp(-focal*x/(z*z),-(1380-cx)/z,(180+cx)/z);
+                    pixels[i++] = focal*x/z+cx+jacobian*dz;
+                }
+                const double disparity = pixels[1]-pixels[0];
+                if (disparity < -limits.popped*1200/1920.-1e-9 || disparity > limits.sunk*1200/1920.+1e-9)
+                    throw std::runtime_error("projected Gaussian support exceeds the limits");
             }
-            const double disparity = pixels[1]-pixels[0];
-            if (disparity < -limits.popped*1200/1920.-1e-9 || disparity > limits.sunk*1200/1920.+1e-9)
-                throw std::runtime_error("projected Gaussian support exceeds the limits");
         }
     } catch (const std::exception& e) {
         std::fprintf(stderr,"stereo_camera_pair: %s\n",e.what());return 1;

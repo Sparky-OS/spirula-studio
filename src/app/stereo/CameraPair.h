@@ -15,6 +15,13 @@ struct CameraPair {
     enum class State { Ready, NoLimits, ZeroLimits, NoSupport } state = State::Ready;
 };
 
+inline ParallaxRange projected_gaussian_range(double z, double radius, double convergence) {
+    if (!(z > 0 && radius >= 0 && convergence > 0 &&
+          std::isfinite(z) && std::isfinite(radius) && std::isfinite(convergence))) return {};
+    const double spread = radius*std::max(1/(z*z),1/(convergence*z));
+    return {std::max(0.,1/convergence-1/z+spread),std::max(0.,1/z-1/convergence+spread),true};
+}
+
 inline CameraPair fit_camera_pair(std::optional<DepthLimits> limits, ParallaxRange support,
                                    double convergence, double focal, int width, bool orthographic) {
     CameraPair pair;
