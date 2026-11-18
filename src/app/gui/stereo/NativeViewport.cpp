@@ -104,6 +104,7 @@ struct NativeViewport::Impl {
     wp_viewport* viewport = nullptr;
     std::vector<std::unique_ptr<Buffer>> buffers;
     Window child = 0;
+    Pixmap pending = 0;
     GC gc = nullptr;
     int raster_width = 0, raster_height = 0;
     bool ensure() {
@@ -131,6 +132,7 @@ struct NativeViewport::Impl {
                                   InputOutput,parent.visual,CWColormap|CWBackPixel|CWEventMask,&attributes);
             XShapeCombineRectangles(host.xdisplay,child,ShapeInput,0,0,nullptr,0,ShapeSet,Unsorted);
             gc = XCreateGC(host.xdisplay,child,0,nullptr);
+            XSetGraphicsExposures(host.xdisplay,gc,False);
             if (stereo_declare_x11_child(host.xdisplay,host.xparent,child,STEREO_SBS_FULL,
                                          STEREO_CLASS_GAME,STEREO_GAME_3D,1,1)) {
                 error_kind = ViewError::Declaration; error = "The compositor cannot declare this stereo child"; return false;
@@ -197,6 +199,7 @@ NativeViewport::~NativeViewport() {
     }
     if (_impl->child) {
         stereo_remove_x11_child(host.xdisplay,host.xparent,_impl->child);
+        if (_impl->pending) XFreePixmap(host.xdisplay,_impl->pending);
         XFreeGC(host.xdisplay,_impl->gc); XDestroyWindow(host.xdisplay,_impl->child);
     }
 #endif
@@ -279,7 +282,14 @@ bool NativeViewport::present(const uint8_t* rgb, int eye_width, int height, uint
                 if (!image->data) { XDestroyImage(image); throw std::bad_alloc(); }
                 for (int row = 0; row < height; ++row)
                     pack((uint32_t*)(image->data+row*image->bytes_per_line),rgb+row*eye_width*6,(size_t)eye_width*2);
-                XPutImage(host.xdisplay,_impl->child,_impl->gc,image,0,0,0,0,2*eye_width,height);
+                if (!_impl->pending || _impl->raster_width!=2*eye_width || _impl->raster_height!=height) {
+                    if (_impl->pending) XFreePixmap(host.xdisplay,_impl->pending);
+                    _impl->pending = XCreatePixmap(host.xdisplay,_impl->child,2*eye_width,height,attributes.depth);
+                    if (!_impl->pending) { XDestroyImage(image); throw std::bad_alloc(); }
+                    _impl->raster_width = 2*eye_width; _impl->raster_height = height;
+                }
+                XPutImage(host.xdisplay,_impl->pending,_impl->gc,image,0,0,0,0,2*eye_width,height);
+                XCopyArea(host.xdisplay,_impl->pending,_impl->child,_impl->gc,0,0,2*eye_width,height,0,0);
                 XDestroyImage(image);
                 _impl->revision = revision;
             }
