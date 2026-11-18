@@ -1,3 +1,4 @@
+#include "core/VulkanInstance.h"
 #include "backend/vulkan/VulkanContext.h"
 #include "i18n/catalog/Data.h"
 
@@ -336,7 +337,7 @@ const Enumeration& enumeration() {
             out.devices.push_back(std::move(d));
             out.issues.push_back(device_issue(p));
         }
-        vkDestroyInstance(inst, nullptr);
+        spirula::destroy_vulkan_instance(inst, nullptr);
         return out;
     }();
     return list;
@@ -678,7 +679,7 @@ Context::~Context() {
         vkDestroySemaphore(_device, _timeline, nullptr);
         vkDestroyDevice(_device, nullptr);
     }
-    if (_instance != VK_NULL_HANDLE) vkDestroyInstance(_instance, nullptr);
+    if (_instance != VK_NULL_HANDLE) spirula::destroy_vulkan_instance(_instance, nullptr);
 }
 
 uint64_t Context::submit(VkCommandBuffer cb) {

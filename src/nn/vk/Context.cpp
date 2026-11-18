@@ -1,3 +1,4 @@
+#include "core/VulkanInstance.h"
 #include "nn/vk/Context.h"
 
 #include "core/VulkanDeviceSelection.h"
@@ -316,7 +317,7 @@ std::vector<DeviceInfo> enumerate_devices() {
     if (n) vkEnumeratePhysicalDevices(inst, &n, devs.data());
     for (uint32_t i = 0; i < n; ++i)
         out.push_back(toDeviceInfo(probeRecord(devs[i], (int)i)));
-    vkDestroyInstance(inst, nullptr);
+    spirula::destroy_vulkan_instance(inst, nullptr);
     return out;
 }
 
@@ -336,7 +337,7 @@ std::vector<sel::DeviceRecord> enumerate_records(VkInstance inst = VK_NULL_HANDL
     out.reserve(n);
     for (uint32_t i = 0; i < n; ++i)
         out.push_back(probeRecord(devs[i], (int)i));
-    if (own != VK_NULL_HANDLE) vkDestroyInstance(own, nullptr);
+    if (own != VK_NULL_HANDLE) spirula::destroy_vulkan_instance(own, nullptr);
     return out;
 }
 
@@ -510,7 +511,7 @@ Context::~Context() {
             instance_, "vkDestroyDebugUtilsMessengerEXT");
         if (fn) fn(instance_, debug_messenger_, nullptr);
     }
-    if (instance_) vkDestroyInstance(instance_, nullptr);
+    if (instance_) spirula::destroy_vulkan_instance(instance_, nullptr);
 }
 
 void Context::init(const ContextOptions& opts) {

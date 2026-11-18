@@ -4,6 +4,7 @@
 #pragma once
 
 
+#include "core/VulkanInstance.h"
 #include <chrono>
 #include <vulkan/vulkan.h>
 
@@ -223,7 +224,7 @@ public:
     // a device plus problem-sized buffers.
     ~VkContext() {
         if (device_ == VK_NULL_HANDLE) {
-            if (instance_ != VK_NULL_HANDLE) vkDestroyInstance(instance_, nullptr);
+            if (instance_ != VK_NULL_HANDLE) spirula::destroy_vulkan_instance(instance_, nullptr);
             return;
         }
         vkDeviceWaitIdle(device_);
@@ -243,7 +244,7 @@ public:
         if (fence_ != VK_NULL_HANDLE) vkDestroyFence(device_, fence_, nullptr);
         if (cmdPool_ != VK_NULL_HANDLE) vkDestroyCommandPool(device_, cmdPool_, nullptr);
         vkDestroyDevice(device_, nullptr);
-        vkDestroyInstance(instance_, nullptr);
+        spirula::destroy_vulkan_instance(instance_, nullptr);
     }
 
     // The device this context runs on, as probed at init(). Zeroed before then.
@@ -279,7 +280,7 @@ public:
         VkInstance inst = VK_NULL_HANDLE;
         if (vkCreateInstance(&ici, nullptr, &inst) != VK_SUCCESS) return out;
         out = enumerateRecords(inst);
-        vkDestroyInstance(inst, nullptr);
+        spirula::destroy_vulkan_instance(inst, nullptr);
         return out;
     }
 
@@ -342,7 +343,7 @@ public:
             out.caps = queryCaps(phys);
             out.resolved = true;
         }
-        vkDestroyInstance(inst, nullptr);
+        spirula::destroy_vulkan_instance(inst, nullptr);
         return out;
     }
 
