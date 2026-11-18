@@ -6,6 +6,7 @@
 #include "backend/api/BackendRuntime.h"
 #include "engine/Engine.h"    // engine render + viewer entry points
 #include "engine/EngineViewerGeometry.h"
+#include "engine/EngineViewerTrace.h"
 #include "core/Camera.h"    // camera_model_from_name
 #include "app/DepthColor.h"  // error_scale -- shared with the error pane
 #include "data/FrustumSize.h"
@@ -321,9 +322,11 @@ struct RenderWorker::Impl {
                     const char* trace = spirula::stereo::pair_trace_directory();
                     std::vector<float> trace_depth, trace_transmittance;
                     std::vector<uint8_t> trace_centre;
+                    EngineViewerProjection trace_projection;
                     if (trace && *trace) {
                         ViewResult centre_result;
                         trace_centre = render_once(centre,centre_result);
+                        trace_projection = engine_viewer_projection();
                         trace_depth.resize((size_t)res.W*res.H);
                         trace_transmittance.resize(trace_depth.size());
                         engine_copy_render_to_host(tv_null(),
@@ -331,15 +334,18 @@ struct RenderWorker::Impl {
                             tvp(trace_transmittance.data(),4,{1,res.H,res.W,1}),tv_null(),tv_null());
                     }
                     auto left_pixels = render_once(p.q,res);
+                    const auto left_projection = trace && *trace ? engine_viewer_projection() : EngineViewerProjection{};
                     ViewResult right_result;
                     auto right_pixels = flat ? left_pixels : render_once(right,right_result);
+                    const auto right_projection = trace && *trace ? engine_viewer_projection() : EngineViewerProjection{};
                     pack_pair(left_pixels,right_pixels,res);
                     if (trace && *trace) {
                         float view[16]; engine_viewmat(centre.c2w,view);
                         spirula::stereo::write_pair_trace(trace,res.id,res.step,res.W,res.H,
                             p.stereo->convergence,cfg.train_frame_scale*cfg.relative_scale.value_or(1.f),
                             centre.fx,centre.cx,centre.cy,cameras.right.offset,view,trace_depth,
-                            trace_transmittance,trace_centre,res.rgb8);
+                            trace_transmittance,trace_centre,res.rgb8,
+                            trace_projection.rows,left_projection.rows,right_projection.rows);
                     }
                 } else if (p.right) {
                     if (p.q.raw || p.right->raw || p.q.W != p.right->W || p.q.H != p.right->H)

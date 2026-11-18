@@ -25,12 +25,18 @@ inline void write_pair_trace(const char* directory, uint64_t id, int step, int w
                              double convergence, double scale, double focal, double cx, double cy,
                              double offset, const float* view, const std::vector<float>& depth,
                              const std::vector<float>& transmittance,
-                             const std::vector<uint8_t>& centre, const std::vector<uint8_t>& pair) {
+                             const std::vector<uint8_t>& centre, const std::vector<uint8_t>& pair,
+                             const std::vector<float>& centre_projection,
+                             const std::vector<float>& left_projection,
+                             const std::vector<float>& right_projection) {
     const std::string base = std::string(directory) + "/pair-" + std::to_string(id%4);
     trace_bytes(base+".depth",depth.data(),depth.size()*sizeof(float));
     trace_bytes(base+".transmittance",transmittance.data(),transmittance.size()*sizeof(float));
     trace_bytes(base+".centre",centre.data(),centre.size());
     trace_bytes(base+".rgb",pair.data(),pair.size());
+    trace_bytes(base+".centre-projection",centre_projection.data(),centre_projection.size()*sizeof(float));
+    trace_bytes(base+".left-projection",left_projection.data(),left_projection.size()*sizeof(float));
+    trace_bytes(base+".right-projection",right_projection.data(),right_projection.size()*sizeof(float));
     FILE* out = std::fopen((base+".json").c_str(),"w");
     if (!out) throw std::runtime_error("viewer trace: cannot open " + base + ".json");
     std::fprintf(out,"{\"request\":%llu,\"step\":%d,\"width\":%d,\"height\":%d,"
