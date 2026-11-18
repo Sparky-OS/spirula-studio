@@ -188,8 +188,11 @@ Each engine pair writes centre RGB8, the diagnostic blended centre-distance and 
 The JSON records request, training step, raster dimensions, centre camera and the applied compositor-derived camera offset.
 Three projection buffers preserve Gaussian identities, world centres and screen data for independent geometry checks.
 The centre-distance channel is alpha-composited and must not be deprojected as an opaque surface.
-A small monochrome request/step grid with CRC8 is identical in both eyes and identifies the buffer actually captured.
+Monochrome request/step grids with CRC8 at opposite ends of each raster are identical in both eyes and identify the buffer actually captured.
 The native viewport logs its placement so a compositor capture can be measured at the actual displayed size.
 The trace adds a centre render and host readback, so its timings are not performance measurements.
 Without both automation and the trace directory this path does no work.
-Decode the witness from both captured eyes to select a trace; an upload log can precede compositor presentation.
+Decode both sites in both captured eyes to select a trace; an upload log can precede compositor presentation.
+Different end codes indicate partial presentation and fail the capture.
+For live training retain two coherent captures with strictly advancing steps while Live remains enabled.
+The X11 child receives one complete pixmap copy after its offscreen upload; the Wayland child commits an immutable shared-memory buffer.
