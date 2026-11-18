@@ -12,6 +12,7 @@ struct ParallaxRange { double sunk = 0, popped = 0; bool valid = false; };
 struct EyeCamera { double offset = 0, principal = 0, shear = 0; };
 struct CameraPair {
     EyeCamera left, right;
+    ParallaxRange support;
     enum class State { Ready, NoLimits, ZeroLimits, NoSupport } state = State::Ready;
 };
 
@@ -23,8 +24,16 @@ inline ParallaxRange projected_gaussian_range(double z, double radius, double co
 }
 
 inline CameraPair fit_camera_pair(std::optional<DepthLimits> limits, ParallaxRange support,
-                                   double convergence, double focal, int width, bool orthographic) {
+                                   double convergence, double focal, int width, bool orthographic,
+                                   std::optional<ParallaxRange> envelope = {}) {
     CameraPair pair;
+    pair.support = support;
+    if (envelope) {
+        support.valid &= envelope->valid && std::isfinite(envelope->sunk) && std::isfinite(envelope->popped) &&
+                         envelope->sunk >= 0 && envelope->popped >= 0;
+        support.sunk = std::max(support.sunk,envelope->sunk);
+        support.popped = std::max(support.popped,envelope->popped);
+    }
     if (!limits) { pair.state = CameraPair::State::NoLimits; return pair; }
     if (!(std::isfinite(limits->sunk) && std::isfinite(limits->popped) &&
           limits->sunk >= 0 && limits->popped >= 0)) {
@@ -59,7 +68,8 @@ inline CameraPair fit_camera_pair(std::optional<DepthLimits> limits, ParallaxRan
 }
 
 inline CameraPair camera_pair(std::optional<DepthLimits> limits, DepthRange range,
-                               double convergence, double focal, int width, bool orthographic) {
+                               double convergence, double focal, int width, bool orthographic,
+                               std::optional<ParallaxRange> envelope = {}) {
     ParallaxRange support;
     support.valid = std::isfinite(range.z_min) && std::isfinite(range.z_max) &&
                     range.z_max >= range.z_min && (orthographic || range.z_min > 0);
@@ -72,7 +82,7 @@ inline CameraPair camera_pair(std::optional<DepthLimits> limits, DepthRange rang
             support.popped = std::max(0.,1/range.z_min-1/convergence);
         }
     }
-    return fit_camera_pair(limits,support,convergence,focal,width,orthographic);
+    return fit_camera_pair(limits,support,convergence,focal,width,orthographic,envelope);
 }
 
 }  // namespace spirula::stereo

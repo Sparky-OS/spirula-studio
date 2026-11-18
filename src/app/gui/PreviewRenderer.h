@@ -103,7 +103,8 @@ public:
         std::optional<spirula::stereo::DepthLimits> limits, const float view[16],
         PreviewProjection projection, double focal, double fy, int W, int H,
         float scene_radius, float view_dist, const float target[3],
-        bool cameras, float frustum_scale, bool grid);
+        bool cameras, float frustum_scale, bool grid,
+        std::optional<spirula::stereo::ParallaxRange> envelope = {});
     std::vector<uint8_t> read_rgb() const;
 
     // A region's boundary drawn over the cloud (app/webviewer/RegionOverlay.h),

@@ -137,6 +137,7 @@ struct ViewResult {
     int W = 0, H = 0;
     int views = 1;
     int step = -1;
+    spirula::stereo::CameraPair cameras;
     spirula::stereo::CameraPair::State pair_state = spirula::stereo::CameraPair::State::Ready;
     std::vector<uint8_t> rgb8;   // [H, views * W, 3]
     std::vector<uint8_t> rgba8;  // [H, W, 4], ViewRequest::raw only
@@ -165,7 +166,8 @@ public:
     // One engine lock and training revision, left first in a full-width pair.
     uint64_t submit_pair(const ViewRequest& left, const ViewRequest& right);
     uint64_t submit_stereo(const ViewRequest& centre, double convergence,
-                           std::optional<spirula::stereo::DepthLimits> limits);
+                           std::optional<spirula::stereo::DepthLimits> limits,
+                           std::optional<spirula::stereo::ParallaxRange> envelope = {});
     // Block up to timeout_s for the result of request `id`.
     bool wait_result(uint64_t id, ViewResult& out, double timeout_s);
     // Non-blocking: true when the result of request `id` is available.

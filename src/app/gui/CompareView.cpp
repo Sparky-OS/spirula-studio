@@ -1098,6 +1098,7 @@ void CompareView::draw(float height) {
     const ImGuiStyle& st = ImGui::GetStyle();
     const bool wipe = _wipe && n >= 2 && _edit_index < 0 && _render_index < 0 &&
         std::all_of(_models.begin(), _models.end(), [](const auto& m) { return m->attached; });
+    if (!wipe) for (auto& model : _models) model->panel.clear_stereo_support();
     // Clearing the active pane's wipe would end its divider drag.
     for (int i = wipe ? 1 : 0; i < n; ++i) _models[i]->panel.set_wipe();
     // Rendering: the primary pane, and the camera's own view where the
@@ -1159,6 +1160,9 @@ void CompareView::draw(float height) {
             panel.sync_view_from(a.panel);
             if (w > 0.0f && h > 0.0f) panel.render_only(ImVec2(w, h));
         }
+        std::vector<ViewportPanel*> panels;
+        for (auto& model : _models) panels.push_back(&model->panel);
+        ViewportPanel::share_stereo_support(panels);
     } else if (n <= 3) {
         const float w = (avail.x - st.ItemSpacing.x * (n - 1)) / n;
         for (int i = 0; i < n; i++) {

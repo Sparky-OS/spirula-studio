@@ -1,5 +1,6 @@
 #include "app/stereo/CameraPair.h"
 #include "app/stereo/VisibleDepth.h"
+#include "app/stereo/PairComposition.h"
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -56,6 +57,34 @@ int main(int argc, char**) {
         hidden.segment({0,0,-3},{0,0,-1});
         if (hidden.range().z_min <= hidden.range().z_max)
             throw std::runtime_error("hidden geometry changed the camera fit");
+        for (bool ortho : {false,true}) {
+            const auto first = camera_pair(DepthLimits{10,4},{1.5,6},3,960,1200,ortho);
+            const auto second = camera_pair(DepthLimits{10,4},{.5,4},1.5,ortho ? 1920 : 960,1200,ortho);
+            ParallaxRange shared{std::max(first.support.sunk,second.support.sunk*(ortho ? 2 : .5)),
+                                 std::max(first.support.popped,second.support.popped*(ortho ? 2 : .5)),true};
+            auto local = shared;
+            local.sunk *= ortho ? .5 : 2; local.popped *= ortho ? .5 : 2;
+            const auto a = fit_camera_pair(DepthLimits{10,4},first.support,3,960,1200,ortho,shared);
+            const auto b = fit_camera_pair(DepthLimits{10,4},second.support,1.5,ortho ? 1920 : 960,1200,ortho,local);
+            close(a.right.offset,2*b.right.offset);
+            close(a.right.principal,b.right.principal); close(a.right.shear,b.right.shear);
+            close(a.support.popped,first.support.popped);
+        }
+        std::vector<std::vector<uint8_t>> sources(4,std::vector<uint8_t>(8*4*6));
+        for (size_t source = 0; source < sources.size(); ++source)
+            for (int eye = 0; eye < 2; ++eye) for (int y = 0; y < 4; ++y) for (int x = 0; x < 8; ++x)
+                sources[source][3*(y*16+eye*8+x)] = 40*source+10*eye+x;
+        for (int count : {2,3,4}) {
+            const std::vector<float> splits = count == 2 ? std::vector<float>{.5f} :
+                count == 3 ? std::vector<float>{.25f,.75f} : std::vector<float>{.5f,.5f};
+            std::vector<PairRegion> regions;
+            for (int i = 0; i < count; ++i) regions.push_back({&sources[i],wipe_rect(i,count,splits)});
+            const auto composed = compose_pair(regions,8,4);
+            for (int eye = 0; eye < 2; ++eye) for (int y = 0; y < 4; ++y) for (int x = 0; x < 8; ++x) {
+                const int source = count == 4 ? 2*(y>=2)+(x>=4) : count == 3 ? (x<2 ? 0 : x<6 ? 1 : 2) : x>=4;
+                close(composed[3*(y*16+eye*8+x)],40*source+10*eye+x);
+            }
+        }
         const DepthLimits limits{10,4};
         const double focal = 1000, convergence = 3;
         for (double z : {1.,6.}) for (double radius : {2.,8.}) {

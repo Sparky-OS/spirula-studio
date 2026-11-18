@@ -5,6 +5,9 @@
 #include <string>
 
 namespace gui::stereo {
+enum class ViewError;
+const spirula::i18n::Msg& viewport_error(ViewError error);
+
 struct Settings { bool enabled = false; int eye_width = 1024; uint64_t revision = 0; };
 Settings& settings();
 bool read_setting(const std::string& key, const std::string& value);

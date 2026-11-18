@@ -66,6 +66,7 @@ struct DevBuf {
 struct StereoRequest {
     double convergence;
     std::optional<spirula::stereo::DepthLimits> limits;
+    std::optional<spirula::stereo::ParallaxRange> envelope;
 };
 
 struct PendingReq {
@@ -263,8 +264,8 @@ struct RenderWorker::Impl {
         }
         auto range = support.range(); range.z_min /= scale; range.z_max /= scale;
         const auto pair = q.model == "PINHOLE" && !ray_traced
-            ? fit_camera_pair(request.limits,projected,request.convergence,q.fx,q.W,false)
-            : camera_pair(request.limits,range,request.convergence,q.fx,q.W,ortho);
+            ? fit_camera_pair(request.limits,projected,request.convergence,q.fx,q.W,false,request.envelope)
+            : camera_pair(request.limits,range,request.convergence,q.fx,q.W,ortho,request.envelope);
         if (spirula::env_on("GUI_AUTOMATION")) {
             std::fprintf(stderr,"[stereo-camera] W=%d H=%d fx=%.9g C=%.9g scale=%.9g z_min=%.9g z_max=%.9g offset=%.9g principal=%.9g shear=%.9g state=%d sunk_coefficient=%.9g popped_coefficient=%.9g unbounded=%lld bad_z=%.9g radius=%.9g\n",
                          q.W,q.H,q.fx,request.convergence,scale,range.z_min,range.z_max,pair.right.offset,pair.right.principal,pair.right.shear,(int)pair.state,projected.sunk,projected.popped,(long long)first_unbounded,bad_z,bad_radius);
@@ -304,6 +305,7 @@ struct RenderWorker::Impl {
                     ViewRequest centre = p.q;
                     const auto cameras = stereo_cameras(centre,*p.stereo);
                     res.pair_state = cameras.state;
+                    res.cameras = cameras;
                     const bool flat = cameras.left.offset == cameras.right.offset &&
                                       cameras.left.shear == cameras.right.shear;
                     if (centre.pick_px >= 0) render_once(centre,res);
@@ -835,8 +837,9 @@ uint64_t RenderWorker::submit_pair(const ViewRequest& left, const ViewRequest& r
     return _impl->submit(left, right);
 }
 uint64_t RenderWorker::submit_stereo(const ViewRequest& centre, double convergence,
-                                    std::optional<spirula::stereo::DepthLimits> limits) {
-    return _impl->submit(centre,{},StereoRequest{convergence,limits});
+                                    std::optional<spirula::stereo::DepthLimits> limits,
+                                    std::optional<spirula::stereo::ParallaxRange> envelope) {
+    return _impl->submit(centre,{},StereoRequest{convergence,limits,envelope});
 }
 
 

@@ -10,7 +10,8 @@ spirula::stereo::CameraPair PreviewRenderer::stereo_cameras(
     std::optional<spirula::stereo::DepthLimits> limits, const float view[16],
     PreviewProjection projection, double focal, double fy, int W, int H,
     float radius, float distance, const float target[3],
-    bool cameras, float frustum_scale, bool grid) {
+    bool cameras, float frustum_scale, bool grid,
+    std::optional<spirula::stereo::ParallaxRange> envelope) {
     using namespace spirula::stereo;
     const bool ortho = projection == PreviewProjection::Orthographic;
     if (!limits || (limits->sunk == 0 && limits->popped == 0))
@@ -57,7 +58,7 @@ spirula::stereo::CameraPair PreviewRenderer::stereo_cameras(
             visible.triangle(camera_point(&layer.xyz[3*layer.tri[i]]),
                              camera_point(&layer.xyz[3*layer.tri[i+1]]),
                              camera_point(&layer.xyz[3*layer.tri[i+2]]));
-    return camera_pair(limits,visible.range(),distance,focal,W,ortho);
+    return camera_pair(limits,visible.range(),distance,focal,W,ortho,envelope);
 }
 
 std::vector<uint8_t> PreviewRenderer::read_rgb() const {

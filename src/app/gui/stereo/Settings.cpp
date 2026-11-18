@@ -1,4 +1,5 @@
 #include "app/gui/stereo/Settings.h"
+#include "app/gui/stereo/NativeViewport.h"
 #include "app/gui/Ui.h"
 #include "app/gui/Subprocess.h"
 #include "core/Env.h"
@@ -39,6 +40,17 @@ bool polish() { return use_polish; }
 const spirula::i18n::Msg& translated(const spirula::i18n::Msg& message, const spirula::i18n::Msg& polish_message) {
     return use_polish && spirula::i18n::current()==spirula::i18n::Lang::en ? polish_message : message;
 }
+const spirula::i18n::Msg& viewport_error(ViewError error) {
+    namespace msg = spirula::i18n::msg::stereo;
+    switch (error) {
+    case ViewError::Allocation: return translated(msg::allocation_failed,msg::allocation_failed_pl);
+    case ViewError::Session: return translated(msg::session_required,msg::session_required_pl);
+    case ViewError::Placement: return translated(msg::placement_failed,msg::placement_failed_pl);
+    case ViewError::PixelFormat: return translated(msg::pixel_format,msg::pixel_format_pl);
+    default: return translated(msg::declaration_failed,msg::declaration_failed_pl);
+    }
+}
+
 bool draw_settings() {
     namespace msg = spirula::i18n::msg::stereo;
     bool changed = ui::MenuItem(translated(msg::enable,msg::enable_pl),nullptr,&state.enabled);

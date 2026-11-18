@@ -43,6 +43,46 @@ SS_MSG(rectified,
     PT("O 3D retifica esta lente para uma vista em perspectiva."), IT("Il 3D rettifica questo obiettivo in una vista prospettica."),
     NL("3D rectificeert deze lens naar een perspectiefweergave."), RU("В 3D этот объектив преобразуется в перспективный вид."),
     TR("3B, bu merceği perspektif görünüme düzeltir."));
+SS_MSG(allocation_failed,
+    EN("Could not allocate the 3D view."), JA("3D 表示のメモリを確保できませんでした。"),
+    ZH_HANS("无法为 3D 视图分配内存。"), ZH_HANT("無法為 3D 視圖配置記憶體。"),
+    KO("3D 보기에 필요한 메모리를 할당하지 못했습니다."), DE("Speicher für die 3D-Ansicht konnte nicht reserviert werden."),
+    FR("Impossible d’allouer la mémoire de la vue 3D."), ES("No se pudo asignar memoria para la vista 3D."),
+    PT("Não foi possível alocar memória para a vista 3D."), IT("Impossibile allocare la memoria per la vista 3D."),
+    NL("Kan geen geheugen voor de 3D-weergave reserveren."), RU("Не удалось выделить память для 3D-вида."),
+    TR("3B görünüm için bellek ayrılamadı."));
+SS_MSG(declaration_failed,
+    EN("Could not declare the 3D view."), JA("3D 表示を宣言できませんでした。"),
+    ZH_HANS("无法声明 3D 视图。"), ZH_HANT("無法宣告 3D 視圖。"),
+    KO("3D 보기를 선언하지 못했습니다."), DE("Die 3D-Ansicht konnte nicht angemeldet werden."),
+    FR("Impossible de déclarer la vue 3D."), ES("No se pudo declarar la vista 3D."),
+    PT("Não foi possível declarar a vista 3D."), IT("Impossibile dichiarare la vista 3D."),
+    NL("Kan de 3D-weergave niet aanmelden."), RU("Не удалось объявить 3D-вид."),
+    TR("3B görünüm bildirilemedi."));
+SS_MSG(session_required,
+    EN("3D requires a Stereo KWin session."), JA("3D 表示には Stereo KWin セッションが必要です。"),
+    ZH_HANS("3D 需要 Stereo KWin 会话。"), ZH_HANT("3D 需要 Stereo KWin 工作階段。"),
+    KO("3D에는 Stereo KWin 세션이 필요합니다."), DE("3D erfordert eine Sitzung mit Stereo KWin."),
+    FR("La 3D nécessite une session Stereo KWin."), ES("El 3D requiere una sesión de Stereo KWin."),
+    PT("O 3D requer uma sessão do Stereo KWin."), IT("Il 3D richiede una sessione Stereo KWin."),
+    NL("3D vereist een sessie met Stereo KWin."), RU("Для 3D нужен сеанс Stereo KWin."),
+    TR("3B için Stereo KWin oturumu gerekir."));
+SS_MSG(placement_failed,
+    EN("Could not place the 3D view."), JA("3D 表示を配置できませんでした。"),
+    ZH_HANS("无法放置 3D 视图。"), ZH_HANT("無法放置 3D 視圖。"),
+    KO("3D 보기를 배치하지 못했습니다."), DE("Die 3D-Ansicht konnte nicht platziert werden."),
+    FR("Impossible de placer la vue 3D."), ES("No se pudo colocar la vista 3D."),
+    PT("Não foi possível posicionar a vista 3D."), IT("Impossibile posizionare la vista 3D."),
+    NL("Kan de 3D-weergave niet plaatsen."), RU("Не удалось разместить 3D-вид."),
+    TR("3B görünüm yerleştirilemedi."));
+SS_MSG(pixel_format,
+    EN("This window's pixel format cannot show 3D."), JA("このウィンドウのピクセル形式では 3D 表示ができません。"),
+    ZH_HANS("此窗口的像素格式无法显示 3D。"), ZH_HANT("此視窗的像素格式無法顯示 3D。"),
+    KO("이 창의 픽셀 형식으로 3D를 표시할 수 없습니다."), DE("Das Pixelformat dieses Fensters kann kein 3D anzeigen."),
+    FR("Le format de pixels de cette fenêtre ne peut pas afficher la 3D."), ES("El formato de píxeles de esta ventana no permite mostrar 3D."),
+    PT("O formato de pixels desta janela não permite exibir 3D."), IT("Il formato dei pixel di questa finestra non può mostrare il 3D."),
+    NL("Het pixelformaat van dit venster kan geen 3D weergeven."), RU("Пиксельный формат этого окна не поддерживает 3D."),
+    TR("Bu pencerenin piksel biçimi 3B gösteremiyor."));
 SS_MSG(settings_failed,
     EN("Could not open Display Settings."), JA("ディスプレイ設定を開けませんでした。"), ZH_HANS("无法打开显示设置。"), ZH_HANT("無法開啟顯示設定。"),
     KO("디스플레이 설정을 열지 못했습니다."), DE("Anzeigeeinstellungen konnten nicht geöffnet werden."), FR("Impossible d’ouvrir la configuration de l’affichage."), ES("No se pudo abrir la configuración de pantalla."),
@@ -57,6 +97,11 @@ inline constexpr auto no_limits_pl = with_polish(no_limits,"Brak limitów głęb
 inline constexpr auto zero_limits_pl = with_polish(zero_limits,"Zerowe limity głębi. Oba obrazy są identyczne.");
 inline constexpr auto no_support_pl = with_polish(no_support,"Głębia sceny nie jest skończona. Oba obrazy są identyczne.");
 inline constexpr auto rectified_pl = with_polish(rectified,"3D prostuje ten obiektyw do widoku perspektywicznego.");
+inline constexpr auto allocation_failed_pl = with_polish(allocation_failed,"Nie można przydzielić pamięci dla widoku 3D.");
+inline constexpr auto declaration_failed_pl = with_polish(declaration_failed,"Nie można zadeklarować widoku 3D.");
+inline constexpr auto session_required_pl = with_polish(session_required,"3D wymaga sesji Stereo KWin.");
+inline constexpr auto placement_failed_pl = with_polish(placement_failed,"Nie można umieścić widoku 3D.");
+inline constexpr auto pixel_format_pl = with_polish(pixel_format,"Format pikseli tego okna nie obsługuje 3D.");
 inline constexpr auto settings_failed_pl = with_polish(settings_failed,"Nie można otworzyć ustawień ekranu.");
 }  // namespace spirula::i18n::msg::stereo
 #include "i18n/EndCatalog.h"

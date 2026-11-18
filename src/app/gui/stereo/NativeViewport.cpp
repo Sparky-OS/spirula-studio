@@ -95,6 +95,7 @@ struct NativeViewport::Impl {
     uint64_t seen = 0, revision = 0;
     bool shown = false;
     std::string error;
+    ViewError error_kind = ViewError::NoError;
 #ifdef __linux__
     wl_surface* surface = nullptr;
     wl_subsurface* subsurface = nullptr;
@@ -105,7 +106,7 @@ struct NativeViewport::Impl {
     int raster_width = 0, raster_height = 0;
     bool ensure() {
         if (!error.empty()) return false;
-        if (!host.error.empty()) { error = host.error; return false; }
+        if (!host.error.empty()) { error = host.error; error_kind = ViewError::Session; return false; }
         if (host.display && !surface) {
             surface = wl_compositor_create_surface(host.compositor);
             subsurface = wl_subcompositor_get_subsurface(host.subcompositor,surface,host.parent);
@@ -115,7 +116,7 @@ struct NativeViewport::Impl {
             wl_region_destroy(region);
             viewport = wp_viewporter_get_viewport(host.viewporter,surface);
             if (stereo_declare_wayland(surface,STEREO_SBS_FULL,STEREO_CLASS_GAME,STEREO_GAME_3D)) {
-                error = "The compositor cannot declare this stereo viewport"; return false;
+                error_kind = ViewError::Declaration; error = "The compositor cannot declare this stereo viewport"; return false;
             }
         } else if (host.xdisplay && !child) {
             XWindowAttributes parent;
@@ -130,7 +131,7 @@ struct NativeViewport::Impl {
             gc = XCreateGC(host.xdisplay,child,0,nullptr);
             if (stereo_declare_x11_child(host.xdisplay,host.xparent,child,STEREO_SBS_FULL,
                                          STEREO_CLASS_GAME,STEREO_GAME_3D,1,1)) {
-                error = "The compositor cannot declare this stereo child"; return false;
+                error_kind = ViewError::Declaration; error = "The compositor cannot declare this stereo child"; return false;
             }
         }
         return surface || child;
@@ -209,7 +210,10 @@ std::optional<Limits> NativeViewport::limits() {
 #endif
     return {};
 }
-const std::string& NativeViewport::error() const { return _impl->error; }
+const std::string& NativeViewport::error() const { return _impl->error.empty() ? host.error : _impl->error; }
+ViewError NativeViewport::error_code() const {
+    return _impl->error.empty() && !host.error.empty() ? ViewError::Session : _impl->error_kind;
+}
 void NativeViewport::hide() {
 #ifdef __linux__
     if (_impl->shown) {
@@ -222,61 +226,69 @@ void NativeViewport::hide() {
 bool NativeViewport::present(const uint8_t* rgb, int eye_width, int height, uint64_t revision,
                              int x, int y, int width, int logical_height) {
     _impl->seen = host.frame;
+    try {
 #ifdef __linux__
-    if (!_impl->ensure() || !rgb || eye_width <= 0 || height <= 0 || width <= 0 || logical_height <= 0) return false;
-    if (host.display) {
-        wl_subsurface_set_position(_impl->subsurface,x,y);
-        wp_viewport_set_destination(_impl->viewport,width,logical_height);
-        if (!_impl->shown || _impl->revision != revision) {
-            auto& buffers = _impl->buffers;
-            buffers.erase(std::remove_if(buffers.begin(),buffers.end(),[&](const auto& b) {
-                return !b->busy && (b->width != 2*eye_width || b->height != height);
-            }),buffers.end());
-            Buffer* available = nullptr;
-            for (auto& buffer : buffers) if (!buffer->busy) { available = buffer.get(); break; }
-            if (!available && buffers.size() < 4) {
-                buffers.push_back(make_buffer(2*eye_width,height)); available = buffers.back().get();
+        if (!_impl->ensure() || !rgb || eye_width <= 0 || height <= 0 || width <= 0 || logical_height <= 0) return false;
+        if (host.display) {
+            wl_subsurface_set_position(_impl->subsurface,x,y);
+            wp_viewport_set_destination(_impl->viewport,width,logical_height);
+            if (!_impl->shown || _impl->revision != revision) {
+                auto& buffers = _impl->buffers;
+                buffers.erase(std::remove_if(buffers.begin(),buffers.end(),[&](const auto& b) {
+                    return !b->busy && (b->width != 2*eye_width || b->height != height);
+                }),buffers.end());
+                Buffer* available = nullptr;
+                for (auto& buffer : buffers) if (!buffer->busy) { available = buffer.get(); break; }
+                if (!available && buffers.size() < 4) {
+                    buffers.push_back(make_buffer(2*eye_width,height)); available = buffers.back().get();
+                }
+                if (!available) return _impl->shown;
+                pack((uint32_t*)available->pixels,rgb,(size_t)eye_width*2*height);
+                available->busy = true;
+                wl_surface_attach(_impl->surface,available->object,0,0);
+                wl_surface_damage(_impl->surface,0,0,INT32_MAX,INT32_MAX);
+                _impl->revision = revision;
             }
-            if (!available) return _impl->shown;
-            pack((uint32_t*)available->pixels,rgb,(size_t)eye_width*2*height);
-            available->busy = true;
-            wl_surface_attach(_impl->surface,available->object,0,0);
-            wl_surface_damage(_impl->surface,0,0,INT32_MAX,INT32_MAX);
-            _impl->revision = revision;
-        }
-        wl_surface_commit(_impl->surface);
-    } else if (host.xdisplay) {
-        XMoveResizeWindow(host.xdisplay,_impl->child,x,y,2*eye_width,height);
-        stereo_declare_x11_one_view_size(host.xdisplay,_impl->child,eye_width,height);
-        stereo_x11_child_place place{x,y,(unsigned)width,(unsigned)logical_height,1};
-        if (stereo_declare_x11_child_place(host.xdisplay,_impl->child,&place)) {
-            _impl->error = "The compositor rejected stereo viewport placement"; return false;
-        }
-        XMapWindow(host.xdisplay,_impl->child);
-        if (!_impl->shown || _impl->revision != revision) {
-            XWindowAttributes attributes;
-            XGetWindowAttributes(host.xdisplay,_impl->child,&attributes);
-            XImage* image = XCreateImage(host.xdisplay,attributes.visual,attributes.depth,ZPixmap,0,
-                                         nullptr,2*eye_width,height,32,0);
-            if (!image || image->bits_per_pixel != 32) {
-                if (image) XDestroyImage(image);
-                _impl->error = "The X11 stereo viewport needs 32-bit pixels"; return false;
+            wl_surface_commit(_impl->surface);
+        } else if (host.xdisplay) {
+            XMoveResizeWindow(host.xdisplay,_impl->child,x,y,2*eye_width,height);
+            stereo_declare_x11_one_view_size(host.xdisplay,_impl->child,eye_width,height);
+            stereo_x11_child_place place{x,y,(unsigned)width,(unsigned)logical_height,1};
+            if (stereo_declare_x11_child_place(host.xdisplay,_impl->child,&place)) {
+                _impl->error_kind = ViewError::Placement;
+                _impl->error = "The compositor rejected stereo viewport placement"; return false;
             }
-            image->data = (char*)std::calloc(height,image->bytes_per_line);
-            if (!image->data) { XDestroyImage(image); throw std::bad_alloc(); }
-            for (int row = 0; row < height; ++row)
-                pack((uint32_t*)(image->data+row*image->bytes_per_line),rgb+row*eye_width*6,(size_t)eye_width*2);
-            XPutImage(host.xdisplay,_impl->child,_impl->gc,image,0,0,0,0,2*eye_width,height);
-            XDestroyImage(image);
-            _impl->revision = revision;
-        }
-        XFlush(host.xdisplay);
-    } else return false;
-    _impl->shown = true;
-    return true;
+            XMapWindow(host.xdisplay,_impl->child);
+            if (!_impl->shown || _impl->revision != revision) {
+                XWindowAttributes attributes;
+                XGetWindowAttributes(host.xdisplay,_impl->child,&attributes);
+                XImage* image = XCreateImage(host.xdisplay,attributes.visual,attributes.depth,ZPixmap,0,
+                                             nullptr,2*eye_width,height,32,0);
+                if (!image || image->bits_per_pixel != 32) {
+                    _impl->error_kind = image ? ViewError::PixelFormat : ViewError::Allocation;
+                    if (image) XDestroyImage(image);
+                    _impl->error = "The X11 stereo viewport needs 32-bit pixels"; return false;
+                }
+                image->data = (char*)std::calloc(height,image->bytes_per_line);
+                if (!image->data) { XDestroyImage(image); throw std::bad_alloc(); }
+                for (int row = 0; row < height; ++row)
+                    pack((uint32_t*)(image->data+row*image->bytes_per_line),rgb+row*eye_width*6,(size_t)eye_width*2);
+                XPutImage(host.xdisplay,_impl->child,_impl->gc,image,0,0,0,0,2*eye_width,height);
+                XDestroyImage(image);
+                _impl->revision = revision;
+            }
+            XFlush(host.xdisplay);
+        } else return false;
+        _impl->shown = true;
+        return true;
 #else
-    return false;
+        return false;
 #endif
+    } catch (const std::exception& exception) {
+        _impl->error = exception.what();
+        _impl->error_kind = ViewError::Allocation;
+        return false;
+    }
 }
 
 }  // namespace gui::stereo

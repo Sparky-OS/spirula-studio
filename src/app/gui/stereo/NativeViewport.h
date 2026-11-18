@@ -9,6 +9,8 @@ struct GLFWwindow;
 
 namespace gui::stereo {
 
+enum class ViewError { NoError, Allocation, Declaration, Session, Placement, PixelFormat };
+
 struct Limits { double sunk = 0, popped = 0; };
 
 void initialize(GLFWwindow* window);
@@ -27,6 +29,7 @@ public:
                  int x, int y, int width, int logical_height);
     void hide();
     const std::string& error() const;
+    ViewError error_code() const;
 private:
     friend void end_frame();
     struct Impl;

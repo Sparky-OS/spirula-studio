@@ -123,6 +123,8 @@ public:
     // otherwise splits are ordered fractions across the image.
     void set_wipe(std::vector<WipeSource> sources = {}, std::vector<float>* splits = nullptr);
     void render_only(const ImVec2& avail);
+    static void share_stereo_support(const std::vector<ViewportPanel*>& panels);
+    void clear_stereo_support();
     void last_avail(float& w, float& h) const { w = _last_avail_w; h = _last_avail_h; }
     // The same pose in the SHARED frame the camera navigates, which is where
     // a placement is dragged: the model moves through it, the grid does not.
@@ -327,6 +329,14 @@ private:
     stereo::NativeViewport _stereo_view;
     uint64_t _stereo_settings_revision = ~uint64_t(0), _stereo_epoch = 0, _pending_epoch = 0;
     uint64_t _stereo_image_epoch = 0, _pair_revision = 0;
+    spirula::stereo::CameraPair _stereo_cameras;
+    std::optional<spirula::stereo::ParallaxRange> _stereo_envelope;
+    std::vector<uint8_t> _comparison_pixels;
+    std::vector<uint64_t> _comparison_stamp;
+    uint64_t _comparison_revision = 0;
+    bool _stereo_canvas = false;
+    float _pending_stereo_pose[13] = {}, _image_stereo_pose[13] = {};
+    const std::vector<uint8_t>* stereo_pixels();
     std::optional<stereo::Limits> _stereo_limits;
     std::vector<uint8_t> _pair_pixels;
     spirula::stereo::CameraPair::State _pair_state = spirula::stereo::CameraPair::State::NoLimits;
