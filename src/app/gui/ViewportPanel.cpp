@@ -980,7 +980,10 @@ void ViewportPanel::refresh_stereo() {
     const auto limits = setting.enabled ? _stereo_view.limits() : std::optional<stereo::Limits>{};
     const bool changed = bool(limits) != bool(_stereo_limits) ||
         (limits && (limits->sunk != _stereo_limits->sunk || limits->popped != _stereo_limits->popped));
-    if (changed || _stereo_settings_revision != setting.revision) {
+    const auto limits_revision = _stereo_view.limits_revision();
+    if (changed || _stereo_settings_revision != setting.revision ||
+        _stereo_limits_revision != limits_revision) {
+        _stereo_limits_revision = limits_revision;
         _stereo_settings_revision = setting.revision;
         _stereo_limits = limits;
         ++_stereo_epoch;

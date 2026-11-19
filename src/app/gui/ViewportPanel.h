@@ -328,7 +328,7 @@ private:
     void present_stereo();
     stereo::NativeViewport _stereo_view;
     uint64_t _stereo_settings_revision = ~uint64_t(0), _stereo_epoch = 0, _pending_epoch = 0;
-    uint64_t _stereo_image_epoch = 0, _pair_revision = 0;
+    uint64_t _stereo_image_epoch = 0, _pair_revision = 0, _stereo_limits_revision = 0;
     spirula::stereo::CameraPair _stereo_cameras;
     std::optional<spirula::stereo::ParallaxRange> _stereo_envelope;
     std::vector<uint8_t> _comparison_pixels;

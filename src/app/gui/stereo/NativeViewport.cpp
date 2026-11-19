@@ -27,7 +27,7 @@ namespace gui::stereo {
 namespace {
 struct Host {
     GLFWwindow* window = nullptr;
-    uint64_t frame = 0;
+    uint64_t frame = 0, limits_revision = 0;
     std::string error;
 #ifdef __linux__
     wl_display* display = nullptr;
@@ -56,7 +56,7 @@ void global(void*, wl_registry* registry, uint32_t name, const char* interface, 
 }
 void removed(void*, wl_registry*, uint32_t) {}
 const wl_registry_listener registry_listener{global,removed};
-void limits_changed(void*, wl_surface*, const stereo_depth_limits*) {}
+void limits_changed(void*, wl_surface*, const stereo_depth_limits*) { ++host.limits_revision; }
 
 struct Buffer {
     wl_buffer* object = nullptr;
@@ -225,6 +225,7 @@ std::optional<Limits> NativeViewport::buffer_limits(double buffer_width, double 
 #endif
     return {};
 }
+uint64_t NativeViewport::limits_revision() const { return host.limits_revision; }
 const std::string& NativeViewport::error() const { return _impl->error.empty() ? host.error : _impl->error; }
 ViewError NativeViewport::error_code() const {
     return _impl->error.empty() && !host.error.empty() ? ViewError::Session : _impl->error_kind;
