@@ -9,7 +9,18 @@
 
 namespace spirula::stereo {
 
+// The person's limits in pixels of the picture that is rendered (see ViewportPanel::buffer_limits): the screen's limits
+// converted for the buffer Stereo KWin will scale, and nothing else.
 struct DepthLimits { double sunk, popped; };
+
+// The person's limits (pixels of a view 1920 wide of the screen) for a picture of buffer_width pixels that Stereo KWin shows
+// shown_width pixels wide on a screen screen_width pixels wide: the limit as it will be on that screen, then the buffer's
+// pixels per screen pixel. A unit conversion; it does not depend on how large the view is, only on how much the buffer is scaled.
+inline std::optional<DepthLimits> buffer_limits(DepthLimits limits, double screen_width, double buffer_width, double shown_width) {
+    if (!(screen_width > 0 && buffer_width > 0 && shown_width > 0)) return {};
+    const double k = screen_width/1920.*buffer_width/shown_width;
+    return DepthLimits{limits.sunk*k,limits.popped*k};
+}
 struct DepthRange { double z_min, z_max; };
 struct ParallaxRange { double sunk = 0, popped = 0; bool valid = false; };
 struct EyeCamera { double offset = 0, principal = 0, shear = 0; };
@@ -41,9 +52,9 @@ inline double camera_offset(DepthLimits limits, const FitScene& scene) {
     auto permitted = [&](ParallaxRange support) {
         const double factor = scene.orthographic ? 1 : scene.focal;
         double amplitude = INFINITY;
-        if (support.sunk > 0) amplitude = limits.sunk * scene.width / (1920. * factor * support.sunk);
+        if (support.sunk > 0) amplitude = limits.sunk / (factor * support.sunk);
         if (support.popped > 0)
-            amplitude = std::min(amplitude,limits.popped * scene.width / (1920. * factor * support.popped));
+            amplitude = std::min(amplitude,limits.popped / (factor * support.popped));
         if (!std::isfinite(amplitude)) amplitude = 0;
         return scene.orthographic ? amplitude / (2 * scene.focal) * scene.convergence : amplitude / 2;
     };

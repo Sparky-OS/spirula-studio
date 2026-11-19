@@ -347,6 +347,7 @@ private:
     void draw_engine(bool training, const ImVec2& avail, int step);
     void pump_engine(bool training, const ImVec2& avail, int step);
     unsigned pump_preview(const ImVec2& avail, int& W, int& H);
+    std::optional<spirula::stereo::DepthLimits> buffer_limits(int W, const ImVec2& avail) const;
     void draw_preview(const ImVec2& avail);
     void draw_wipe(const ImVec2& tl, const ImVec2& size) const;
     bool wipe_input(const ImVec2& tl, const ImVec2& size);

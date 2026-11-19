@@ -23,7 +23,7 @@ spirula::stereo::CameraPair PreviewRenderer::stereo_cameras(
     if (_ov_visible && _ov && _ov != _ov_uploaded) upload_overlay();
     const double near_z = std::max(1e-7f,0.002f*std::min(radius,distance));
     const double far_z = std::max({10.0*near_z,500.0*radius,20.0*distance});
-    const double sweep = limits->sunk*W/1920.*(ortho ? 1 : distance)/focal/2;
+    const double sweep = limits->sunk*(ortho ? 1 : distance)/focal/2;
     const double principal = ortho ? 0 : focal*sweep/distance;
     VisibleDepth visible((W/2.+principal)/focal,(W/2.+principal)/focal,
                          H/2./fy,H/2./fy,sweep,near_z,far_z,ortho);

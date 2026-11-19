@@ -215,6 +215,30 @@ std::optional<Limits> NativeViewport::limits() {
 #endif
     return {};
 }
+double NativeViewport::screen_width() {
+    if (!host.window) return 0;
+    int count = 0;
+    GLFWmonitor** monitors = glfwGetMonitors(&count);
+    if (!monitors || count <= 0) return 0;
+    GLFWmonitor* chosen = glfwGetPrimaryMonitor();
+    if (host.display == nullptr) {
+        // X11 (Xwayland): the monitor the window overlaps most
+        int wx = 0, wy = 0, ww = 0, wh = 0, best = 0;
+        glfwGetWindowPos(host.window,&wx,&wy);
+        glfwGetWindowSize(host.window,&ww,&wh);
+        for (int i = 0; i < count; ++i) {
+            int mx = 0, my = 0;
+            glfwGetMonitorPos(monitors[i],&mx,&my);
+            const GLFWvidmode* mode = glfwGetVideoMode(monitors[i]);
+            if (!mode) continue;
+            const int ox = std::max(0,std::min(wx+ww,mx+mode->width)-std::max(wx,mx));
+            const int oy = std::max(0,std::min(wy+wh,my+mode->height)-std::max(wy,my));
+            if (ox*oy > best) { best = ox*oy; chosen = monitors[i]; }
+        }
+    }
+    const GLFWvidmode* mode = chosen ? glfwGetVideoMode(chosen) : nullptr;
+    return mode ? mode->width : 0;
+}
 const std::string& NativeViewport::error() const { return _impl->error.empty() ? host.error : _impl->error; }
 ViewError NativeViewport::error_code() const {
     return _impl->error.empty() && !host.error.empty() ? ViewError::Session : _impl->error_kind;

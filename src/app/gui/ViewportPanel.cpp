@@ -966,6 +966,17 @@ void ViewportPanel::destroy_gl() {
     }
 }
 
+// The person's limits are pixels of a view 1920 wide of the screen. The picture is rendered at W pixels an eye and Stereo KWin
+// shows it avail.x * the framebuffer scale pixels wide on a screen of screen_width() pixels, so a limit is
+// limit * screen_width / 1920 * W / shown pixels of the picture: a unit conversion, the same for any size of the view.
+std::optional<spirula::stereo::DepthLimits> ViewportPanel::buffer_limits(int W, const ImVec2& avail) const {
+    if (!_stereo_limits) return {};
+    const double screen = stereo::NativeViewport::screen_width();
+    const double shown = (double)avail.x*ImGui::GetIO().DisplayFramebufferScale.x;
+    if (!(screen > 0 && shown > 0 && W > 0)) return {};
+    return spirula::stereo::buffer_limits({_stereo_limits->sunk,_stereo_limits->popped},screen,W,shown);
+}
+
 void ViewportPanel::refresh_stereo() {
     const auto& setting = stereo::settings();
     const auto limits = setting.enabled ? _stereo_view.limits() : std::optional<stereo::Limits>{};
@@ -1968,7 +1979,7 @@ unsigned ViewportPanel::pump_preview(const ImVec2& avail, int& W, int& H) {
     };
     if (!stereo_on) { _preview_tex = render(nullptr); return _preview_tex; }
     std::optional<spirula::stereo::DepthLimits> limits;
-    if (_stereo_limits) limits = {_stereo_limits->sunk,_stereo_limits->popped};
+    limits = buffer_limits(W,avail);
     const auto cameras = _preview.stereo_cameras(limits,view,(PreviewProjection)render_camera_model(),
         fx,fy,W,H,_home_dist,nav_dist()/_m2s_scale,target,_show_cams,_frustum_scale,
         _show_grid && !external_grid(),_stereo_envelope);
@@ -2264,7 +2275,7 @@ void ViewportPanel::pump_engine(bool training, const ImVec2& avail, int step) {
         std::copy_n(_last_pose,13,_pending_stereo_pose);
         if (stereo::settings().enabled) {
             std::optional<spirula::stereo::DepthLimits> limits;
-            if (_stereo_limits) limits = spirula::stereo::DepthLimits{_stereo_limits->sunk,_stereo_limits->popped};
+            limits = buffer_limits(W,avail);
             _pending = _worker.submit_stereo(q,nav_dist()/_m2s_scale,limits,_stereo_envelope);
         } else _pending = _worker.submit(q);
         _last_submit = now;

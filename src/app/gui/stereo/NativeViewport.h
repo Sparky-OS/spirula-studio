@@ -25,6 +25,9 @@ public:
     NativeViewport(const NativeViewport&) = delete;
     NativeViewport& operator=(const NativeViewport&) = delete;
     std::optional<Limits> limits();
+    // The width in pixels of the screen (output) the window is on: the unit of the limits is a view 1920 wide of that screen.
+    // 0 when it cannot be read.
+    static double screen_width();
     bool present(const uint8_t* rgb, int eye_width, int height, uint64_t revision,
                  int x, int y, int width, int logical_height);
     void hide();
