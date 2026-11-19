@@ -966,15 +966,13 @@ void ViewportPanel::destroy_gl() {
     }
 }
 
-// The person's limits are pixels of a view 1920 wide of the screen. The picture is rendered at W pixels an eye and Stereo KWin
-// shows it avail.x * the framebuffer scale pixels wide on a screen of screen_width() pixels, so a limit is
-// limit * screen_width / 1920 * W / shown pixels of the picture: a unit conversion, the same for any size of the view.
-std::optional<spirula::stereo::DepthLimits> ViewportPanel::buffer_limits(int W, const ImVec2& avail) const {
+// The person's limits in the pixels of the picture rendered W pixels an eye and shown avail.x * the framebuffer scale pixels
+// wide: libstereo-declare converts them with the output the window is on, whatever the size of the view.
+std::optional<spirula::stereo::DepthLimits> ViewportPanel::buffer_limits(int W, const ImVec2& avail) {
     if (!_stereo_limits) return {};
-    const double screen = stereo::NativeViewport::screen_width();
-    const double shown = (double)avail.x*ImGui::GetIO().DisplayFramebufferScale.x;
-    if (!(screen > 0 && shown > 0 && W > 0)) return {};
-    return spirula::stereo::buffer_limits({_stereo_limits->sunk,_stereo_limits->popped},screen,W,shown);
+    const auto limits = _stereo_view.buffer_limits(W,(double)avail.x*ImGui::GetIO().DisplayFramebufferScale.x);
+    if (!limits) return {};
+    return spirula::stereo::DepthLimits{limits->sunk,limits->popped};
 }
 
 void ViewportPanel::refresh_stereo() {

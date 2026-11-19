@@ -25,9 +25,9 @@ public:
     NativeViewport(const NativeViewport&) = delete;
     NativeViewport& operator=(const NativeViewport&) = delete;
     std::optional<Limits> limits();
-    // The width in pixels of the screen (output) the window is on: the unit of the limits is a view 1920 wide of that screen.
-    // 0 when it cannot be read.
-    static double screen_width();
+    // The person's limits in the pixels of an eye buffer of buffer_width pixels that Stereo KWin shows shown_width pixels wide:
+    // libstereo-declare's conversion with the output the window is on (the one source; this adds no rule).
+    std::optional<Limits> buffer_limits(double buffer_width, double shown_width);
     bool present(const uint8_t* rgb, int eye_width, int height, uint64_t revision,
                  int x, int y, int width, int logical_height);
     void hide();

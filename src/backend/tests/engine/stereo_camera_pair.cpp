@@ -129,28 +129,6 @@ int main(int argc, char**) {
                     throw std::runtime_error("projected Gaussian support exceeds the limits");
             }
         }
-        // One separation, tailored to the screen: the same view at two sizes on one 1920 wide screen, rendered at the
-        // size it is shown, gets the same offset and the same disparity on the screen (ORDER 750).
-        {
-            const DepthLimits screen{10,4};
-            double on_screen[2] = {0,0}; int n = 0;
-            for (double shown : {1920.,960.}) {
-                const auto buffer = buffer_limits(screen,1920,shown,shown);
-                if (!buffer) throw std::runtime_error("no buffer limits");
-                const auto pair = camera_pair(buffer,{1.5,6},3,0.8*shown,(int)shown,false);
-                on_screen[n++] = 2*0.8*shown*pair.right.offset*(1./3-1./1.5);
-            }
-            // the disparity of a point of the view in screen pixels (the buffer is shown as it is)
-            if (std::abs(on_screen[0]) < 1e-9 || std::abs(on_screen[0]-on_screen[1]) > 1e-9*std::abs(on_screen[0]))
-                throw std::runtime_error("the separation depends on the size of the view");
-            // a buffer rendered at half the size it is shown at: half the pixels for the same limit on the screen
-            const auto half = buffer_limits(screen,1920,960,1920);
-            if (!half || std::abs(half->sunk-5) > 1e-9 || std::abs(half->popped-2) > 1e-9)
-                throw std::runtime_error("the render ratio is not the buffer-to-screen ratio");
-            // a 3840 wide screen: twice the pixels, Stereo KWin's lround(limit * output width / 1920)
-            const auto wide = buffer_limits(screen,3840,3840,3840);
-            if (!wide || std::abs(wide->sunk-20) > 1e-9) throw std::runtime_error("the screen's width is not used");
-        }
     } catch (const std::exception& e) {
         std::fprintf(stderr,"stereo_camera_pair: %s\n",e.what());return 1;
     }
